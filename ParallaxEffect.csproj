@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>11</LangVersion>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<Reference Include="..\REFERENCES\*.dll" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Parallax Effect\plugins\" />
+	</ItemGroup>
+
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<ItemGroup>
+			<BuildFiles Include="$(Outdir)\ParallaxEffect.*" />
+		</ItemGroup>
+		<Copy SourceFiles="@(BuildFiles)" DestinationFolder="Parallax Effect\plugins" />
+		<ItemGroup>
+			<OutputFolder Include="Parallax Effect\*" />
+		</ItemGroup>
+		<Copy SourceFiles="@(OutputFolder)" DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\Parallax Effect" />
+		<Copy SourceFiles="@(BuildFiles)" DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\Parallax Effect\plugins" />
+	</Target>
+
+</Project>

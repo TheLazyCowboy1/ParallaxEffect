@@ -1,0 +1,11 @@
+{
+  "id": "LazyCowboy.ParallaxEffect",
+  "name": "A Parallax Shader",
+  "version": "0.0.1",
+  "authors": "LazyCowboy",
+  "description": "Basic parallax-like effect using a shader.",
+  "requirements": [],
+  "requirements_names": [],
+  "tags": ["Cosmetics", "Base", "Downpour", "Watcher"],
+  "checksum_override_version": false
+}

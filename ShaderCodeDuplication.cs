@@ -8,6 +8,9 @@ using UnityEngine;
 
 namespace DEPRECATED_STUFF;
 
+/// <summary>
+/// please ignore this; this is for my or archival purposes only
+/// </summary>
 internal class DEPRECATED_STUFF
 {
     /*private Color tex2D(Texture2D _LevelTex, float2 textCoord) => _LevelTex.GetPixel((int)(textCoord.x * 1400f), (int)(textCoord.y * 800f));

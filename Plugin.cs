@@ -9,6 +9,8 @@ using Unity.Mathematics;
 using UnityEngine.Profiling;
 using System.Runtime.CompilerServices;
 using Menu;
+using RWCustom;
+using Rewired;
 
 #pragma warning disable CS0618
 
@@ -49,7 +51,7 @@ public partial class Plugin : BaseUnityPlugin
         if (IsInit)
         {
             On.RoomCamera.ctor -= RoomCamera_ctor;
-            On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
+            //On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
             On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
 
             //On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
@@ -75,7 +77,7 @@ public partial class Plugin : BaseUnityPlugin
             if (IsInit) return;
 
             On.RoomCamera.ctor += RoomCamera_ctor;
-            On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
+            //On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
             On.RoomCamera.GetCameraBestIndex += RoomCamera_GetCameraBestIndex;
 
             //On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
@@ -161,69 +163,10 @@ public partial class Plugin : BaseUnityPlugin
         }
     }
 
-    private Color RoomCamera_PixelColorAtCoordinate(On.RoomCamera.orig_PixelColorAtCoordinate orig, RoomCamera self, Vector2 coord)
-    {
-        if (!WarpedLevelTextures.TryGetValue(self, out var tex))
-            return orig(self, coord);
-
-        Vector2 vector = coord - self.CamPos(self.currentCameraPosition);
-        Color pixel = tex.GetPixel(Mathf.FloorToInt(vector.x), Mathf.FloorToInt(vector.y));
-        if (pixel.r == 1f && pixel.g == 1f && pixel.b == 1f)
-        {
-            return self.paletteTexture.GetPixel(0, 7);
-        }
-        int num = Mathf.FloorToInt(pixel.r * 255f);
-        float num2 = 0f;
-        if (num > 90)
-        {
-            num -= 90;
-        }
-        else
-        {
-            num2 = 1f;
-        }
-        int num3 = Mathf.FloorToInt((float)num / 30f);
-        int num4 = (num - 1) % 30;
-        return Color.Lerp(Color.Lerp(self.paletteTexture.GetPixel(num4, num3 + 3), self.paletteTexture.GetPixel(num4, num3), num2), self.paletteTexture.GetPixel(1, 7), (float)num4 * (1f - self.paletteTexture.GetPixel(9, 7).r) / 30f);
-    }
-
-    private bool? RoomCamera_LitAtCoordinate(On.RoomCamera.orig_LitAtCoordinate orig, RoomCamera self, Vector2 coord)
-    {
-        if (!WarpedLevelTextures.TryGetValue(self, out var tex))
-            return orig(self, coord);
-
-        Vector2 vector = coord - self.CamPos(self.currentCameraPosition);
-        Color pixel = tex.GetPixel(Mathf.FloorToInt(vector.x), Mathf.FloorToInt(vector.y));
-        if (pixel.r == 1f && pixel.g == 1f && pixel.b == 1f)
-        {
-            return null;
-        }
-        return new bool?(Mathf.FloorToInt(pixel.r * 255f) > 90);
-    }
-
-    private float RoomCamera_DepthAtCoordinate(On.RoomCamera.orig_DepthAtCoordinate orig, RoomCamera self, Vector2 coord)
-    {
-        if (!WarpedLevelTextures.TryGetValue(self, out var tex))
-            return orig(self, coord);
-
-        Vector2 vector = coord - self.CamPos(self.currentCameraPosition);
-        Color pixel = tex.GetPixel(Mathf.FloorToInt(vector.x), Mathf.FloorToInt(vector.y));
-        if (pixel.r == 1f && pixel.g == 1f && pixel.b == 1f)
-        {
-            return 1f;
-        }
-        int num = Mathf.FloorToInt(pixel.r * 255f);
-        if (num > 90)
-        {
-            num -= 90;
-        }
-        return (float)((num - 1) % 30) / 30f;
-    }
-
     //public static ConditionalWeakTable<RoomCamera, Texture2D> WarpedLevelTextures = new();
-    public static Dictionary<RoomCamera, Texture2D> WarpedLevelTextures = new();
+    //public static Dictionary<RoomCamera, Texture2D> WarpedLevelTextures = new();
 
-    private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
+    /*private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
     {
         orig(self, timeStacker, timeSpeed);
 
@@ -261,9 +204,10 @@ public partial class Plugin : BaseUnityPlugin
             else Logger.LogDebug("Cannot find _PostParallaxGrab");
         }
         catch (Exception ex) { Logger.LogError(ex); }
-    }
+    }*/
 
-    public static float2 CamPos;
+    //public static float2 CamPos;
+    public static Dictionary<RoomCamera, float2> CamPos = new();
 
     private void RoomCamera_GetCameraBestIndex(On.RoomCamera.orig_GetCameraBestIndex orig, RoomCamera self)
     {
@@ -275,18 +219,44 @@ public partial class Plugin : BaseUnityPlugin
             Vector2? critPos = (crit.inShortcut ? self.game.shortcuts.OnScreenPositionOfInShortCutCreature(self.room, crit) : crit.mainBodyChunk.pos);
             if (critPos != null)
             {
-                Vector2 localPos = critPos.Value - self.CamPos(self.currentCameraPosition);
+                if (!CamPos.ContainsKey(self))
+                    CamPos.Add(self, new(0.5f, 0.5f));
+
+                Vector2 localPos = (critPos.Value - self.CamPos(self.currentCameraPosition));// / self.sSize;
+                localPos += self.followCreatureInputForward * 4f;
+                localPos += self.leanPos * 4f;
+                localPos /= self.sSize;
+
+                try
+                {
+                    float mouseX = Input.GetAxis("Mouse X") * 0.25f;
+                    if (mouseX != 0f)
+                    {
+                        float strength = Mathf.Clamp01(Mathf.Abs(mouseX));
+                        //mouseX = 0.5f + 0.5f * Mathf.Clamp(mouseX, -1f, 1f);
+                        localPos.x += strength * ((mouseX > 0 ? 0.8f : -0.8f) - localPos.x);
+                    }
+
+                    float mouseY = Input.GetAxis("Mouse Y") * 0.25f * 0.5625f; //0.5625 = 9/16 
+                    if (mouseY != 0f)
+                    {
+                        float strength = Mathf.Clamp01(Mathf.Abs(mouseY));
+                        //mouseY = 0.5f + 0.5f * Mathf.Clamp(mouseY, -1f, 1f);
+                        localPos.y += strength * ((mouseY > 0 ? 0.8f : -0.8f) - localPos.y);
+                    }
+                }
+                catch { }
+
+                CamPos[self] += Options.CameraMoveSpeed.Value * (new float2(localPos.x, localPos.y) - CamPos[self]);
                 if (Options.InvertPos.Value)
                 {
-                    CamPos = new(1f - localPos.x / self.sSize.x, 1f - localPos.y / self.sSize.y);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - localPos.x / self.sSize.x);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - localPos.y / self.sSize.y);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - CamPos[self].x);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - CamPos[self].y);
                 }
                 else
                 {
-                    CamPos = new(localPos.x / self.sSize.x, localPos.y / self.sSize.y);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", localPos.x / self.sSize.x);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", localPos.y / self.sSize.y);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", CamPos[self].x);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", CamPos[self].y);
                 }
             }
         }
@@ -301,7 +271,7 @@ public partial class Plugin : BaseUnityPlugin
 
     private void RoomCamera_ctor(On.RoomCamera.orig_ctor orig, RoomCamera self, RainWorldGame game, int cameraNumber)
     {
-        WarpedLevelTextures.Clear(); //just in case
+        //WarpedLevelTextures.Clear(); //just in case
 
         //setup constants
         Shader.SetGlobalFloat("TheLazyCowboy1_WarpX", Options.Warp.Value / 1400f);
@@ -315,28 +285,33 @@ public partial class Plugin : BaseUnityPlugin
         switch (Options.SmoothingType.Value)
         {
             case "SINESMOOTHING":
-                if (!Shader.IsKeywordEnabled("SINESMOOTHING"))
+                if (!Shader.IsKeywordEnabled("THELAZYCOWBOY1_SINESMOOTHING"))
                 {
-                    if (Shader.IsKeywordEnabled("INVSINESMOOTHING"))
-                        Shader.DisableKeyword("INVSINESMOOTHING");
-                    Shader.EnableKeyword("SINESMOOTHING");
+                    if (Shader.IsKeywordEnabled("THELAZYCOWBOY1_INVSINESMOOTHING"))
+                        Shader.DisableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
+                    Shader.EnableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
                 }
                 break;
             case "INVSINESMOOTHING":
-                if (!Shader.IsKeywordEnabled("INVSINESMOOTHING"))
+                if (!Shader.IsKeywordEnabled("THELAZYCOWBOY1_INVSINESMOOTHING"))
                 {
-                    if (Shader.IsKeywordEnabled("SINESMOOTHING"))
-                        Shader.DisableKeyword("SINESMOOTHING");
-                    Shader.EnableKeyword("INVSINESMOOTHING");
+                    if (Shader.IsKeywordEnabled("THELAZYCOWBOY1_SINESMOOTHING"))
+                        Shader.DisableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
+                    Shader.EnableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
                 }
                 break;
-            case "FLAT":
-                if (Shader.IsKeywordEnabled("SINESMOOTHING"))
-                    Shader.DisableKeyword("SINESMOOTHING");
-                if (Shader.IsKeywordEnabled("INVSINESMOOTHING"))
-                    Shader.DisableKeyword("INVSINESMOOTHING");
+            default://case "FLAT":
+                if (Shader.IsKeywordEnabled("THELAZYCOWBOY1_SINESMOOTHING"))
+                    Shader.DisableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
+                if (Shader.IsKeywordEnabled("THELAZYCOWBOY1_INVSINESMOOTHING"))
+                    Shader.DisableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
                 break;
         }
+
+        if (Options.NoCenterWarp.Value && !Shader.IsKeywordEnabled("THELAZYCOWBOY1_NOCENTERWARP"))
+            Shader.EnableKeyword("THELAZYCOWBOY1_NOCENTERWARP");
+        else if (!Options.NoCenterWarp.Value && Shader.IsKeywordEnabled("THELAZYCOWBOY1_NOCENTERWARP"))
+            Shader.DisableKeyword("THELAZYCOWBOY1_NOCENTERWARP");
 
         orig(self, game, cameraNumber);
 

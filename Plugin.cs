@@ -54,6 +54,8 @@ public partial class Plugin : BaseUnityPlugin
             //On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
             On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
 
+            On.CustomDecal.DrawSprites -= CustomDecal_DrawSprites;
+
             //On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
 
             //On.RoomCamera.DepthAtCoordinate -= RoomCamera_DepthAtCoordinate;
@@ -79,6 +81,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.ctor += RoomCamera_ctor;
             //On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
             On.RoomCamera.GetCameraBestIndex += RoomCamera_GetCameraBestIndex;
+
+            On.CustomDecal.DrawSprites += CustomDecal_DrawSprites;
 
             //On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
 
@@ -161,6 +165,68 @@ public partial class Plugin : BaseUnityPlugin
             Logger.LogError(ex);
             throw;
         }
+    }
+
+    float depthCurve(float d)
+    {
+        switch (Options.DepthCurve.Value)
+        {
+            case "EXTREME":
+                return d * (d * (d - 3) + 3); //much more severe, cubic curve
+            case "PARABOLIC": //this case enables BOTH options... to indicate a "compromise" or something...?
+                return d * (2 - d); //simple parabola
+            case "INVERSE":
+                return d * d * d; //...really severe!! maybe this should be toned down...?
+        }
+        return d; //linear
+    }
+    float approxSine(float x)
+    {
+        return x * (1.5f - 0.5f * x * x); //this is a really cheap but more than adaquate approximation!
+    }
+    float sinSmoothCurve(float diff)
+    {
+        switch (Options.SmoothingType.Value)
+        {
+            case "SINESMOOTHING":
+                return approxSine(diff);
+            case "INVSINESMOOTHING":
+                return diff + diff - approxSine(diff);
+        }
+        return diff;
+    }
+    private void CustomDecal_DrawSprites(On.CustomDecal.orig_DrawSprites orig, CustomDecal self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+
+        try
+        {
+            if (Options.WarpDecals.Value && CamPos.TryGetValue(rCam, out float2 pos))
+            {
+                for (int i = 0; i < self.verts.Length; i++)
+                {
+                    if (self.verts[i].x >= 0 && self.verts[i].x < rCam.sSize.x
+                        && self.verts[i].y >= 0 && self.verts[i].y < rCam.sSize.y) //simple bounds check
+                    {
+                        //(sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, self.verts[i] - camPos);
+                        //Vector2 warp = Options.Warp.Value * depthCurve(rCam.DepthAtCoordinate(self.verts[i]) * 1.2f - 0.2f)
+                        var data = self.placedObject.data as PlacedObject.CustomDecalData; //use flat data instead of image depth?
+                        Vector2 warp = Options.Warp.Value * depthCurve((0.5f * (data.fromDepth + data.toDepth) - 5f) * 0.04f)
+                            * new Vector2(sinSmoothCurve(self.verts[i].x / 1400f - pos.x), sinSmoothCurve(self.verts[i].y / 800f - pos.y));
+                            //* (Options.NoCenterWarp.Value
+                                //? 2f * new Vector2(Mathf.Abs(pos.x - 0.5f), Mathf.Abs(pos.y - 0.5f))
+                                //: new Vector2(1f, 1f));
+                        if (Options.NoCenterWarp.Value)
+                        {
+                            warp.x *= 2f * Mathf.Abs(pos.x - 0.5f);
+                            warp.y *= 2f * Mathf.Abs(pos.y - 0.5f);
+                        }
+                        (sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, self.verts[i] - camPos + warp);
+                    }
+                }
+            }
+        }
+        catch (Exception ex) { Logger.LogError(ex); }
     }
 
     //public static ConditionalWeakTable<RoomCamera, Texture2D> WarpedLevelTextures = new();
@@ -278,33 +344,46 @@ public partial class Plugin : BaseUnityPlugin
         Shader.SetGlobalFloat("TheLazyCowboy1_WarpY", Options.Warp.Value / 800f);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpX", Options.MaxWarp.Value / 1400f);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.MaxWarp.Value / 800f);
-        Shader.SetGlobalInt("TheLazyCowboy1_TestNum", (int)Mathf.Ceil(Options.MaxWarp.Value / Options.Optimization.Value));
+        int testNum = (int)Mathf.Ceil(Options.MaxWarp.Value * (1 - Options.StartOffset.Value) / Options.Optimization.Value);
+        Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum + 1); //add 1 to make it range [0,1] instead of [0,1)
+        Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (1 - Options.StartOffset.Value) / testNum);
+        Shader.SetGlobalFloat("TheLazyCowboy1_StartOffset", Options.StartOffset.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 0.5f);
         Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 0.5f);
 
         switch (Options.SmoothingType.Value)
         {
             case "SINESMOOTHING":
-                if (!Shader.IsKeywordEnabled("THELAZYCOWBOY1_SINESMOOTHING"))
-                {
-                    if (Shader.IsKeywordEnabled("THELAZYCOWBOY1_INVSINESMOOTHING"))
-                        Shader.DisableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
-                    Shader.EnableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
-                }
+                Shader.DisableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
+                Shader.EnableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
                 break;
             case "INVSINESMOOTHING":
-                if (!Shader.IsKeywordEnabled("THELAZYCOWBOY1_INVSINESMOOTHING"))
-                {
-                    if (Shader.IsKeywordEnabled("THELAZYCOWBOY1_SINESMOOTHING"))
-                        Shader.DisableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
-                    Shader.EnableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
-                }
+                Shader.DisableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
+                Shader.EnableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
                 break;
             default://case "FLAT":
-                if (Shader.IsKeywordEnabled("THELAZYCOWBOY1_SINESMOOTHING"))
-                    Shader.DisableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
-                if (Shader.IsKeywordEnabled("THELAZYCOWBOY1_INVSINESMOOTHING"))
-                    Shader.DisableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
+                Shader.DisableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
+                Shader.DisableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
+                break;
+        }
+
+        switch (Options.DepthCurve.Value)
+        {
+            case "EXTREME":
+                Shader.EnableKeyword("THELAZYCOWBOY1_DEPTHCURVE");
+                Shader.DisableKeyword("THELAZYCOWBOY1_INVDEPTHCURVE");
+                break;
+            case "PARABOLIC": //this case enables BOTH options... to indicate a "compromise" or something...?
+                Shader.EnableKeyword("THELAZYCOWBOY1_DEPTHCURVE");
+                Shader.EnableKeyword("THELAZYCOWBOY1_INVDEPTHCURVE");
+                break;
+            case "INVERSE":
+                Shader.DisableKeyword("THELAZYCOWBOY1_DEPTHCURVE");
+                Shader.EnableKeyword("THELAZYCOWBOY1_INVDEPTHCURVE");
+                break;
+            default: //case "LINEAR":
+                Shader.DisableKeyword("THELAZYCOWBOY1_DEPTHCURVE");
+                Shader.DisableKeyword("THELAZYCOWBOY1_INVDEPTHCURVE");
                 break;
         }
 

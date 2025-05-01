@@ -11,6 +11,8 @@ using System.Runtime.CompilerServices;
 using Menu;
 using RWCustom;
 using Rewired;
+using Watcher;
+using UnityEngine.Rendering;
 
 #pragma warning disable CS0618
 
@@ -51,7 +53,7 @@ public partial class Plugin : BaseUnityPlugin
         if (IsInit)
         {
             On.RoomCamera.ctor -= RoomCamera_ctor;
-            //On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
+            On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
             On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
 
             On.CustomDecal.DrawSprites -= CustomDecal_DrawSprites;
@@ -67,8 +69,10 @@ public partial class Plugin : BaseUnityPlugin
     }
 
     //public FShader parallaxFShader;
+    public Shader parallaxShader;
+    public Material parallaxMaterial;
 
-    public static int ShadPostParallaxGrab = -1;
+    //public static int ShadPostParallaxGrab = -1;
 
     private bool IsInit;
     private void RainWorldOnOnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
@@ -79,7 +83,7 @@ public partial class Plugin : BaseUnityPlugin
             if (IsInit) return;
 
             On.RoomCamera.ctor += RoomCamera_ctor;
-            //On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
+            On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
             On.RoomCamera.GetCameraBestIndex += RoomCamera_GetCameraBestIndex;
 
             On.CustomDecal.DrawSprites += CustomDecal_DrawSprites;
@@ -108,7 +112,13 @@ public partial class Plugin : BaseUnityPlugin
                     catch (Exception ex) { Logger.LogError(ex); }
                 }
 
-                LoadShader("ParallaxEffect.shader", "LevelColor");
+                //LoadShader("ParallaxEffect.shader", "LevelColor");
+                //LoadShader("LevelColor.shader", "LevelColor");
+
+                parallaxShader = assetBundle.LoadAsset<Shader>("ParallaxEffect.shader");
+                if (parallaxShader == null)
+                    Logger.LogError("Could not find shader ParallaxEffect.shader");
+                parallaxMaterial = new(parallaxShader);
 
                 /*LoadShader("WaterSurface.shader", "WaterSurface");
                 LoadShader("WarpTear.shader", "WarpTear");
@@ -151,7 +161,7 @@ public partial class Plugin : BaseUnityPlugin
                 LoadShader("Background.shader", "Background");
                 LoadShader("AncientUrbanBuilding.shader", "AncientUrbanBuilding");*/
 
-                ShadPostParallaxGrab = Shader.PropertyToID("_PostParallaxGrab");
+                //ShadPostParallaxGrab = Shader.PropertyToID("_PostParallaxGrab");
             }
             catch (Exception ex) { Logger.LogError(ex); }
             
@@ -167,6 +177,35 @@ public partial class Plugin : BaseUnityPlugin
         }
     }
 
+    public RenderTexture parallaxRenderTex;
+    private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
+    {
+        /*parallaxRenderTex ??= new(new RenderTextureDescriptor(self.levelTexture.width, self.levelTexture.height));
+        Graphics.Blit(
+            (self.levelTexCombiner != null && self.levelTexCombiner.isActive) ? self.levelTexCombiner.combinedLevelTex : self.levelTexture,
+            parallaxRenderTex,
+            parallaxMaterial
+            );
+        Shader.SetGlobalTexture(RainWorld.ShadPropLevelTex, parallaxRenderTex);
+
+        Shader.EnableKeyword("COMBINEDLEVEL");*/
+
+        try
+        {
+            if (!self.levelTexCombiner.bufferIDs.Contains("LazyCowboy_ParallaxShader"))
+            {
+                self.levelTexCombiner.AddPass(parallaxShader, "LazyCowboy_ParallaxShader");
+                Logger.LogDebug($"Added {parallaxShader.name} shader pass!");
+            }
+        }
+        catch (Exception ex) { Logger.LogError(ex); }
+
+        orig(self, timeStacker, timeSpeed);
+
+        //Shader.SetGlobalVector(RainWorld.ShadPropSpriteRect, new Vector4(0, 0, 1, 1));
+        //Shader.SetGlobalVector(RainWorld.ShadPropSpriteRect, new Vector4(self.levelGraphic.x / self.sSize.x, self.levelGraphic.y / self.sSize.y, 1f + self.levelGraphic.x / self.sSize.x, 1f + self.levelGraphic.y / self.sSize.y));
+    }
+
     float depthCurve(float d)
     {
         switch (Options.DepthCurve.Value)
@@ -176,7 +215,7 @@ public partial class Plugin : BaseUnityPlugin
             case "PARABOLIC": //this case enables BOTH options... to indicate a "compromise" or something...?
                 return d * (2 - d); //simple parabola
             case "INVERSE":
-                return d * d * d; //...really severe!! maybe this should be toned down...?
+                return 0.5f*d * (d*d + 1); //averages d^3 with d
         }
         return d; //linear
     }
@@ -205,72 +244,29 @@ public partial class Plugin : BaseUnityPlugin
             {
                 for (int i = 0; i < self.verts.Length; i++)
                 {
-                    if (self.verts[i].x >= 0 && self.verts[i].x < rCam.sSize.x
-                        && self.verts[i].y >= 0 && self.verts[i].y < rCam.sSize.y) //simple bounds check
+                    Vector2 localVert = self.verts[i] - camPos;
+                    if (localVert.x >= 0 && localVert.x < rCam.sSize.x
+                        && localVert.y >= 0 && localVert.y < rCam.sSize.y) //simple bounds check
                     {
-                        //(sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, self.verts[i] - camPos);
                         //Vector2 warp = Options.Warp.Value * depthCurve(rCam.DepthAtCoordinate(self.verts[i]) * 1.2f - 0.2f)
                         var data = self.placedObject.data as PlacedObject.CustomDecalData; //use flat data instead of image depth?
-                        Vector2 warp = Options.Warp.Value * depthCurve((0.5f * (data.fromDepth + data.toDepth) - 5f) * 0.04f)
-                            * new Vector2(sinSmoothCurve(self.verts[i].x / 1400f - pos.x), sinSmoothCurve(self.verts[i].y / 800f - pos.y));
-                            //* (Options.NoCenterWarp.Value
-                                //? 2f * new Vector2(Mathf.Abs(pos.x - 0.5f), Mathf.Abs(pos.y - 0.5f))
-                                //: new Vector2(1f, 1f));
+                        //use the decal's depth (weighted towards the deeper part) to determine a warp factor
+                        Vector2 warp = Options.Warp.Value * depthCurve((0.3f*data.fromDepth + 0.7f*data.toDepth - 5f) * 0.04f)
+                            * new Vector2(sinSmoothCurve(localVert.x / 1400f - pos.x), sinSmoothCurve(localVert.y / 800f - pos.y));
+                            //* new Vector2(sinSmoothCurve(self.verts[i].x / 1400f - pos.x), sinSmoothCurve(self.verts[i].y / 800f - pos.y));
                         if (Options.NoCenterWarp.Value)
                         {
                             warp.x *= 2f * Mathf.Abs(pos.x - 0.5f);
                             warp.y *= 2f * Mathf.Abs(pos.y - 0.5f);
                         }
-                        (sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, self.verts[i] - camPos + warp);
+                        //(sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, self.verts[i] - camPos + warp);
+                        (sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, localVert + warp);
                     }
                 }
             }
         }
         catch (Exception ex) { Logger.LogError(ex); }
     }
-
-    //public static ConditionalWeakTable<RoomCamera, Texture2D> WarpedLevelTextures = new();
-    //public static Dictionary<RoomCamera, Texture2D> WarpedLevelTextures = new();
-
-    /*private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
-    {
-        orig(self, timeStacker, timeSpeed);
-
-        try
-        {
-            var postParallaxGrabRaw = Shader.GetGlobalTexture(ShadPostParallaxGrab);
-            if (postParallaxGrabRaw != null)
-            {
-                //RenderTexture texConverted = postParallaxGrabRaw as RenderTexture;
-                Texture2D tex2D = self.levelTexture.Clone();
-                //Texture2D grab2D = new(postParallaxGrabRaw.width, postParallaxGrabRaw.height);
-                //Graphics.CopyTexture(grab2D, postParallaxGrabRaw);
-                Graphics.CopyTexture(postParallaxGrabRaw, 0, 0, 0, 0, postParallaxGrabRaw.width, postParallaxGrabRaw.height,
-                    tex2D, 0, 0, Mathf.Max(0, -Mathf.RoundToInt(self.levelGraphic.x)), Mathf.Max(0, -Mathf.RoundToInt(self.levelGraphic.y)));
-
-                //Vector2 start = -self.levelGraphic.GetPosition(), size = new(postParallaxGrabRaw.width, postParallaxGrabRaw.height);
-                //tex2D.SetPixels(postParallaxGrabRaw.)
-
-                Shader.SetGlobalTexture(RainWorld.ShadPropLevelTex, tex2D);
-
-                if (!WarpedLevelTextures.ContainsKey(self))
-                    WarpedLevelTextures.Add(self, tex2D);
-                else
-                    WarpedLevelTextures[self] = tex2D;
-
-                //Logger.LogDebug($"PostParallaxGrab Size = {postParallaxGrabRaw.width}x{postParallaxGrabRaw.height}");
-                //var postParallaxGrab = postParallaxGrabRaw as Texture2D;
-                //if (postParallaxGrab != null)
-                //{
-                //postParallaxGrab.Resize(1400, 800);
-                //Shader.SetGlobalTexture(RainWorld.ShadPropLevelTex, postParallaxGrab);
-                //}
-                //else Logger.LogDebug("Texture is not a Texture2D!!!");
-            }
-            else Logger.LogDebug("Cannot find _PostParallaxGrab");
-        }
-        catch (Exception ex) { Logger.LogError(ex); }
-    }*/
 
     //public static float2 CamPos;
     public static Dictionary<RoomCamera, float2> CamPos = new();
@@ -288,10 +284,11 @@ public partial class Plugin : BaseUnityPlugin
                 if (!CamPos.ContainsKey(self))
                     CamPos.Add(self, new(0.5f, 0.5f));
 
-                Vector2 localPos = (critPos.Value - self.CamPos(self.currentCameraPosition));// / self.sSize;
-                localPos += self.followCreatureInputForward * 4f;
-                localPos += self.leanPos * 4f;
-                localPos /= self.sSize;
+                //Vector2 localPos = (critPos.Value - self.CamPos(self.currentCameraPosition)
+                //Vector2 localPos = (critPos.Value - self.levelGraphic.GetPosition()
+                Vector2 localPos = (critPos.Value - self.pos
+                    + (self.followCreatureInputForward + self.leanPos) * 4f)
+                    / self.sSize;
 
                 try
                 {
@@ -313,6 +310,9 @@ public partial class Plugin : BaseUnityPlugin
                 }
                 catch { }
 
+                localPos.x = Mathf.Clamp01(localPos.x);
+                localPos.y = Mathf.Clamp01(localPos.y);
+
                 CamPos[self] += Options.CameraMoveSpeed.Value * (new float2(localPos.x, localPos.y) - CamPos[self]);
                 if (Options.InvertPos.Value)
                 {
@@ -332,7 +332,13 @@ public partial class Plugin : BaseUnityPlugin
     {
         orig(self);
 
-        Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", self.levelTexture);
+        //Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", self.levelTexture);
+        try
+        {
+            //self.levelTexCombiner.AddPass(RenderTexture.GetTemporary(1400, 800), parallaxMaterial, parallaxShader.name, LevelTexCombiner.last);
+            self.levelTexCombiner.AddPass(parallaxShader, parallaxShader.name, LevelTexCombiner.last);
+            //Logger.LogDebug($"Added {parallaxShader.name} shader pass!"); //happens every screen change; annoying log spam
+        } catch (Exception ex) { Logger.LogError(ex); }
     }
 
     private void RoomCamera_ctor(On.RoomCamera.orig_ctor orig, RoomCamera self, RainWorldGame game, int cameraNumber)
@@ -342,12 +348,14 @@ public partial class Plugin : BaseUnityPlugin
         //setup constants
         Shader.SetGlobalFloat("TheLazyCowboy1_WarpX", Options.Warp.Value / 1400f);
         Shader.SetGlobalFloat("TheLazyCowboy1_WarpY", Options.Warp.Value / 800f);
-        Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpX", Options.MaxWarp.Value / 1400f);
-        Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.MaxWarp.Value / 800f);
-        int testNum = (int)Mathf.Ceil(Options.MaxWarp.Value * (1 - Options.StartOffset.Value) / Options.Optimization.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpX", Options.Warp.Value * Options.MaxWarpFactor.Value / 1400f);
+        Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.Warp.Value * Options.MaxWarpFactor.Value / 800f);
+        //Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.MaxWarp.Value / 800f);
+        int testNum = (int)Mathf.Ceil(Options.Warp.Value * Options.MaxWarpFactor.Value * (Options.EndOffset.Value - Options.StartOffset.Value) / Options.Optimization.Value);
         Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum + 1); //add 1 to make it range [0,1] instead of [0,1)
-        Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (1 - Options.StartOffset.Value) / testNum);
+        Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (Options.EndOffset.Value - Options.StartOffset.Value) / testNum);
         Shader.SetGlobalFloat("TheLazyCowboy1_StartOffset", Options.StartOffset.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 0.5f);
         Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 0.5f);
 
@@ -391,6 +399,8 @@ public partial class Plugin : BaseUnityPlugin
             Shader.EnableKeyword("THELAZYCOWBOY1_NOCENTERWARP");
         else if (!Options.NoCenterWarp.Value && Shader.IsKeywordEnabled("THELAZYCOWBOY1_NOCENTERWARP"))
             Shader.DisableKeyword("THELAZYCOWBOY1_NOCENTERWARP");
+
+        Logger.LogDebug($"Setup shader constants");
 
         orig(self, game, cameraNumber);
 

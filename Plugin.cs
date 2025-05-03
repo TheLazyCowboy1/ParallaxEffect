@@ -13,6 +13,7 @@ using RWCustom;
 using Rewired;
 using Watcher;
 using UnityEngine.Rendering;
+using UnityEngine.Experimental.Rendering;
 
 #pragma warning disable CS0618
 
@@ -58,11 +59,7 @@ public partial class Plugin : BaseUnityPlugin
 
             On.CustomDecal.DrawSprites -= CustomDecal_DrawSprites;
 
-            //On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
-
-            //On.RoomCamera.DepthAtCoordinate -= RoomCamera_DepthAtCoordinate;
-            //On.RoomCamera.LitAtCoordinate -= RoomCamera_LitAtCoordinate;
-            //On.RoomCamera.PixelColorAtCoordinate -= RoomCamera_PixelColorAtCoordinate;
+            On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
 
             IsInit = false;
         }
@@ -71,8 +68,6 @@ public partial class Plugin : BaseUnityPlugin
     //public FShader parallaxFShader;
     public Shader parallaxShader;
     public Material parallaxMaterial;
-
-    //public static int ShadPostParallaxGrab = -1;
 
     private bool IsInit;
     private void RainWorldOnOnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
@@ -88,80 +83,17 @@ public partial class Plugin : BaseUnityPlugin
 
             On.CustomDecal.DrawSprites += CustomDecal_DrawSprites;
 
-            //On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
-
-            //On.RoomCamera.DepthAtCoordinate += RoomCamera_DepthAtCoordinate;
-            //On.RoomCamera.LitAtCoordinate += RoomCamera_LitAtCoordinate;
-            //On.RoomCamera.PixelColorAtCoordinate += RoomCamera_PixelColorAtCoordinate;
+            On.Watcher.LevelTexCombiner.CreateBuffer += LevelTexCombiner_CreateBuffer;
 
             //load shader
             try
             {
                 AssetBundle assetBundle = AssetBundle.LoadFromFile(AssetManager.ResolveFilePath("AssetBundles\\LazyCowboy\\ParallaxEffect.assets"));
 
-                void LoadShader(string fileName, string internalName)
-                {
-                    Logger.LogDebug($"Shader: {fileName} -> {internalName}");
-                    try
-                    {
-                        Shader shader = assetBundle.LoadAsset<Shader>(fileName);
-                        if (shader == null)
-                            Logger.LogDebug($"Shader {fileName} is null");
-                        self.Shaders[internalName].shader = shader;
-                    }
-                    catch (Exception ex) { Logger.LogError(ex); }
-                }
-
-                //LoadShader("ParallaxEffect.shader", "LevelColor");
-                //LoadShader("LevelColor.shader", "LevelColor");
-
                 parallaxShader = assetBundle.LoadAsset<Shader>("ParallaxEffect.shader");
                 if (parallaxShader == null)
                     Logger.LogError("Could not find shader ParallaxEffect.shader");
                 parallaxMaterial = new(parallaxShader);
-
-                /*LoadShader("WaterSurface.shader", "WaterSurface");
-                LoadShader("WarpTear.shader", "WarpTear");
-                LoadShader("Sandstorm.shader", "Sandstorm");
-                LoadShader("RotWormFin.shader", "RotWormFin");
-                LoadShader("RotWormBody.shader", "RotWormBody");
-                LoadShader("PlaceholderBackgroundElement.shader", "PlaceholderBackgroundElement");
-                LoadShader("OuterRimDustGradient.shader", "OuterRimDustGradient");
-                LoadShader("OuterRimBackgroundBuilding.shader", "OuterRimBackgroundBuilding");
-                LoadShader("MudPit.shader", "MudPit");
-                LoadShader("LightSource.shader", "LightSource");
-                LoadShader("LightBloom.shader", "LightBloom");
-                LoadShader("LightAndSkyBloom.shader", "LightAndSkyBloom");
-                LoadShader("GreebleGrid.shader", "GreebleGrid");
-                LoadShader("GildedWind.shader", "GildedWind");
-                LoadShader("FirmamentCloud.shader", "FirmamentCloud");
-                LoadShader("FallingStar.shader", "FallingStar");
-                LoadShader("DustGradient.shader", "DustGradient");
-                LoadShader("DustDunes.shader", "DustDunes");
-                LoadShader("DistantBkgObjectRepeatHorizontal.shader", "DistantBkgObjectRepeatHorizontal");
-                LoadShader("DistantBkgObjectAlpha.shader", "DistantBkgObjectAlpha");
-                LoadShader("DistantBkgObject.shader", "DistantBkgObject");
-                LoadShader("DeepWater.shader", "DeepWater");
-                LoadShader("Cloud.shader", "Cloud");
-
-                LoadShader("BoxWorm.shader", "BoxWormBody");
-                LoadShader("BoxWorm.shader", "BoxWormLarvaHolder");
-                LoadShader("BoxWorm.shader", "BoxWormBox");
-                LoadShader("BoxWorm.shader", "BoxWormOpenBox");
-                LoadShader("BoxWorm.shader", "BoxWormFakeLarva");
-                LoadShader("BoxWorm.shader", "BoxWormLarvaFood");
-                LoadShader("BoxWorm.shader", "FireSpriteWing");
-                LoadShader("BoxWorm.shader", "FireSpriteBody");
-
-                LoadShader("BkgFloor.shader", "BkgFloor");
-                LoadShader("BackgroundNoHoles.shader", "BackgroundNoHoles");
-                LoadShader("BackgroundJaggedCircle.shader", "BackgroundJaggedCircle");
-                LoadShader("BackgroundDune.shader", "BackgroundDune");
-                LoadShader("BackgroundAdditive.shader", "BackgroundAdditive");
-                LoadShader("Background.shader", "Background");
-                LoadShader("AncientUrbanBuilding.shader", "AncientUrbanBuilding");*/
-
-                //ShadPostParallaxGrab = Shader.PropertyToID("_PostParallaxGrab");
             }
             catch (Exception ex) { Logger.LogError(ex); }
             
@@ -177,33 +109,22 @@ public partial class Plugin : BaseUnityPlugin
         }
     }
 
-    public RenderTexture parallaxRenderTex;
-    private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
+    private void LevelTexCombiner_CreateBuffer(On.Watcher.LevelTexCombiner.orig_CreateBuffer orig, LevelTexCombiner self, string id, RenderTargetIdentifier texture, Material material, CameraEvent evt)
     {
-        /*parallaxRenderTex ??= new(new RenderTextureDescriptor(self.levelTexture.width, self.levelTexture.height));
-        Graphics.Blit(
-            (self.levelTexCombiner != null && self.levelTexCombiner.isActive) ? self.levelTexCombiner.combinedLevelTex : self.levelTexture,
-            parallaxRenderTex,
-            parallaxMaterial
-            );
-        Shader.SetGlobalTexture(RainWorld.ShadPropLevelTex, parallaxRenderTex);
-
-        Shader.EnableKeyword("COMBINEDLEVEL");*/
-
         try
         {
-            if (!self.levelTexCombiner.bufferIDs.Contains("LazyCowboy_ParallaxShader"))
+            if (Options.ResolutionScale.Value != 1f && id == LevelTexCombiner.firstPass)
             {
-                self.levelTexCombiner.AddPass(parallaxShader, "LazyCowboy_ParallaxShader");
-                Logger.LogDebug($"Added {parallaxShader.name} shader pass!");
+                self.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
+                self.combinedLevelTex.filterMode = 0;
+                self.intermediateTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
+                self.intermediateTex.filterMode = 0;
+                Shader.SetGlobalTexture("_LevelTex", self.combinedLevelTex);
             }
+
+            orig(self, id, texture, material, evt);
         }
         catch (Exception ex) { Logger.LogError(ex); }
-
-        orig(self, timeStacker, timeSpeed);
-
-        //Shader.SetGlobalVector(RainWorld.ShadPropSpriteRect, new Vector4(0, 0, 1, 1));
-        //Shader.SetGlobalVector(RainWorld.ShadPropSpriteRect, new Vector4(self.levelGraphic.x / self.sSize.x, self.levelGraphic.y / self.sSize.y, 1f + self.levelGraphic.x / self.sSize.x, 1f + self.levelGraphic.y / self.sSize.y));
     }
 
     float depthCurve(float d)
@@ -223,16 +144,18 @@ public partial class Plugin : BaseUnityPlugin
     {
         return x * (1.5f - 0.5f * x * x); //this is a really cheap but more than adaquate approximation!
     }
-    float sinSmoothCurve(float diff)
+    float sinSmoothCurve(float x)
     {
         switch (Options.SmoothingType.Value)
         {
-            case "SINESMOOTHING":
-                return approxSine(diff);
-            case "INVSINESMOOTHING":
-                return diff + diff - approxSine(diff);
+            case "EXTREME":
+                return 0.125f*x*(15 + x*x*(-10 + x*x*3));
+            case "SINUSOIDAL":
+                return approxSine(x);
+            case "INVERSE":
+                return x + x - approxSine(x);
         }
-        return diff;
+        return x;
     }
     private void CustomDecal_DrawSprites(On.CustomDecal.orig_DrawSprites orig, CustomDecal self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
     {
@@ -287,7 +210,7 @@ public partial class Plugin : BaseUnityPlugin
                 //Vector2 localPos = (critPos.Value - self.CamPos(self.currentCameraPosition)
                 //Vector2 localPos = (critPos.Value - self.levelGraphic.GetPosition()
                 Vector2 localPos = (critPos.Value - self.pos
-                    + (self.followCreatureInputForward + self.leanPos) * 4f)
+                    + (self.followCreatureInputForward + self.leanPos) * 2f)
                     / self.sSize;
 
                 try
@@ -346,26 +269,35 @@ public partial class Plugin : BaseUnityPlugin
         //WarpedLevelTextures.Clear(); //just in case
 
         //setup constants
-        Shader.SetGlobalFloat("TheLazyCowboy1_WarpX", Options.Warp.Value / 1400f);
-        Shader.SetGlobalFloat("TheLazyCowboy1_WarpY", Options.Warp.Value / 800f);
-        Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpX", Options.Warp.Value * Options.MaxWarpFactor.Value / 1400f);
-        Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.Warp.Value * Options.MaxWarpFactor.Value / 800f);
+        //Shader.SetGlobalFloat("TheLazyCowboy1_WarpX", Options.Warp.Value / 1400f);
+        //Shader.SetGlobalFloat("TheLazyCowboy1_WarpY", Options.Warp.Value / 800f);
+        //Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpX", Options.Warp.Value * Options.MaxWarpFactor.Value / 1400f);
+        //Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.Warp.Value * Options.MaxWarpFactor.Value / 800f);
         //Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.MaxWarp.Value / 800f);
-        int testNum = (int)Mathf.Ceil(Options.Warp.Value * Options.MaxWarpFactor.Value * (Options.EndOffset.Value - Options.StartOffset.Value) / Options.Optimization.Value);
-        Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum + 1); //add 1 to make it range [0,1] instead of [0,1)
-        Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (Options.EndOffset.Value - Options.StartOffset.Value) / testNum);
-        Shader.SetGlobalFloat("TheLazyCowboy1_StartOffset", Options.StartOffset.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_Warp", Options.Warp.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarp", Options.MaxWarpFactor.Value);
+
+        float startOffset = Mathf.Max(Options.StartOffset.Value, depthCurve(-0.2f)); //prevent unnecessary processing
+        int testNum = (int)Mathf.Ceil(Options.Warp.Value * Options.MaxWarpFactor.Value * (Options.EndOffset.Value - startOffset) / Options.Optimization.Value);
+        Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum);
+        Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (Options.EndOffset.Value - startOffset) / testNum);
+
+        Shader.SetGlobalFloat("TheLazyCowboy1_StartOffset", startOffset);
         Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 0.5f);
         Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 0.5f);
 
         switch (Options.SmoothingType.Value)
         {
-            case "SINESMOOTHING":
-                Shader.DisableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
+            case "EXTREME": //enables both options, just to save on file size
                 Shader.EnableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
+                Shader.EnableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
                 break;
-            case "INVSINESMOOTHING":
+            case "SINUSOIDAL":
+                Shader.EnableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
+                Shader.DisableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
+                break;
+            case "INVERSE":
                 Shader.DisableKeyword("THELAZYCOWBOY1_SINESMOOTHING");
                 Shader.EnableKeyword("THELAZYCOWBOY1_INVSINESMOOTHING");
                 break;
@@ -400,7 +332,12 @@ public partial class Plugin : BaseUnityPlugin
         else if (!Options.NoCenterWarp.Value && Shader.IsKeywordEnabled("THELAZYCOWBOY1_NOCENTERWARP"))
             Shader.DisableKeyword("THELAZYCOWBOY1_NOCENTERWARP");
 
-        Logger.LogDebug($"Setup shader constants");
+        if (Options.ClosestPixelOnly.Value && !Shader.IsKeywordEnabled("THELAZYCOWBOY1_CLOSESTPIXELONLY"))
+            Shader.EnableKeyword("THELAZYCOWBOY1_CLOSESTPIXELONLY");
+        else if (!Options.ClosestPixelOnly.Value && Shader.IsKeywordEnabled("THELAZYCOWBOY1_CLOSESTPIXELONLY"))
+            Shader.DisableKeyword("THELAZYCOWBOY1_CLOSESTPIXELONLY");
+
+        Logger.LogDebug("Setup shader constants");
 
         orig(self, game, cameraNumber);
 

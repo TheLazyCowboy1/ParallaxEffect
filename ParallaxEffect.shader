@@ -151,15 +151,16 @@ half4 frag (v2f i) : SV_Target
 	#endif
 
 	float2 moveStep = TheLazyCowboy1_Warp * TheLazyCowboy1_StepSize * _LevelTex_TexelSize * float2(
+	//float2 moveStep = TheLazyCowboy1_Warp * float2(
 		clamp(posCamXDiff, -TheLazyCowboy1_MaxWarp, TheLazyCowboy1_MaxWarp),
 		clamp(posCamYDiff, -TheLazyCowboy1_MaxWarp, TheLazyCowboy1_MaxWarp)
 		);
 
 		//optimization attempt; failed: produces concentric rectangles
-	/*float invStepSize = max(abs(moveStep.x), abs(moveStep.y));
-	float stepSize = 1 / invStepSize;
-	float maxTests = TheLazyCowboy1_TestNum * TheLazyCowboy1_StepSize * invStepSize;
-	moveStep = moveStep * stepSize * _LevelTex_TexelSize;*/ 
+	//float invStepSize = max(abs(moveStep.x), abs(moveStep.y)) + 1;
+	//float stepSize = 1 / invStepSize;
+	//float maxTests = TheLazyCowboy1_TestNum * TheLazyCowboy1_StepSize * invStepSize;
+	//moveStep = moveStep * stepSize * _LevelTex_TexelSize;
 	#if THELAZYCOWBOY1_CLOSESTPIXELONLY
 	float invStepSize = 1 / TheLazyCowboy1_StepSize;
 	#endif
@@ -169,15 +170,19 @@ half4 frag (v2f i) : SV_Target
 	float redColorMod = 0;
 
 	uint totalTests = min(TheLazyCowboy1_TestNum, 300); //lazy way to limit loop size
-	float2 grabPos = i.uv + moveStep * (float)totalTests * TheLazyCowboy1_StartOffset;
+	float2 grabPos = i.uv + moveStep * (float)totalTests * TheLazyCowboy1_StepSize;
 	uint counter = 0;
-	float percentage = TheLazyCowboy1_StartOffset + 0.0009765625f; //add a very tiny margin of error: 1/1024
-	uint notFound = 1; //saves A LOT of processing
+	float noiseVal = tex2D(_NoiseTex2, i.uv).x;
+	float percentage = TheLazyCowboy1_StartOffset
+		+ 0.25f * TheLazyCowboy1_StepSize * max(noiseVal - 0.2f, 0) //a SIGNIFICANT warp in order to break up straight lines...
+		+ 0.0009765625f; //add a very tiny margin of error: 1/1024
+	uint notFound = 1; //saves A LOT of processing, unless CLOSESTPIXELONLY is chosen
 
 	while (counter <= totalTests) {
 		#if !THELAZYCOWBOY1_CLOSESTPIXELONLY
 		if (notFound) {
 		#endif
+		//if (notFound && counter <= maxTests) {
 			fixed4 newCol = tex2D(_LevelTex, grabPos);
 			float newDepth = depthOfPixel(newCol);
 
@@ -195,7 +200,9 @@ half4 frag (v2f i) : SV_Target
 				bestCol = newCol;
 				bestScore = score;
 				redColorMod = xDistance;
+				#if !THELAZYCOWBOY1_CLOSESTPIXELONLY
 				notFound = 0;
+				#endif
 			}
 
 			grabPos = grabPos + moveStep;
@@ -211,7 +218,7 @@ half4 frag (v2f i) : SV_Target
 	#else
 	redColorMod = redColorMod * TheLazyCowboy1_RedModScale;
 		//add noise to roughen it up a bit
-	redColorMod = redColorMod + min(redColorMod, 0.4f) * (tex2D(_NoiseTex2, i.uv).x - 0.5f) * 0.5f; //up to ~5 pixel variation: 0.4 * 0.5 = 0.2; 0.2 * 25px = 5px
+	redColorMod = redColorMod + min(redColorMod, 0.4f) * (noiseVal - 0.5f) * 0.5f; //up to ~5 pixel variation: 0.4 * 0.5 = 0.2; 0.2 * 25px = 5px
 	#endif
 		//0.092 ~= 23.5 / 255; reduced to 0.09 to be safe
 	//bestCol.r = bestCol.r + (clamp(redColorMod, 0, 1 - actualDepthOfPixel(bestCol)) * 0.09f); //(floor(clamp(redColorMod, 0, 1) * 24.9f) / 255.0f);

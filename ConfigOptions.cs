@@ -1,6 +1,7 @@
 using BepInEx.Logging;
 using Menu.Remix;
 using Menu.Remix.MixedUI;
+using RWCustom;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -13,7 +14,7 @@ public class ConfigOptions : OptionInterface
     public ConfigOptions()
     {
         //AllSlugcats = this.config.Bind<bool>("AllSlugcats", false);
-        Warp = this.config.Bind<float>("Warp", 20f, new ConfigAcceptableRange<float>(2f, 200f));
+        Warp = this.config.Bind<float>("Warp", 25f, new ConfigAcceptableRange<float>(2f, 200f));
         //MaxWarp = this.config.Bind<float>("MaxWarp", 20f, new ConfigAcceptableRange<float>(0, 100f));
         MaxWarpFactor = this.config.Bind<float>("MaxWarpFactor", 0.9f, new ConfigAcceptableRange<float>(0.1f, 1f));
         Optimization = this.config.Bind<float>("Optimization", 1f, new ConfigAcceptableRange<float>(0.2f, 10f));
@@ -58,6 +59,17 @@ public class ConfigOptions : OptionInterface
             optionsTab
         };
 
+        float[] displayScales = new float[Display.displays.Length];
+        for (int i = 0; i < displayScales.Length; i++)
+        {
+            displayScales[i] = Mathf.Round(Mathf.Max(
+                Display.displays[i].systemWidth / Custom.rainWorld.options.ScreenSize.x,
+                Display.displays[i].systemHeight / Custom.rainWorld.options.ScreenSize.y
+                ) * 100f) * 0.01f;
+        }
+        string displayScaleString = "" + displayScales[0];
+        for (int i = 1; i < displayScales.Length; i++) displayScaleString += " or " + displayScales[i];
+
         float t = 150f, y = 560f, h = -35f, x = 50f, w = 80f, c = 50f;
         float t2 = 400f, x2 = 300f;
 
@@ -89,7 +101,7 @@ public class ConfigOptions : OptionInterface
                 new OpLabel(t2, y, "Mouse Sensitivity"),
                 new OpUpdown(MouseSensitivity, new(x2, y), w, 2) { description = "The sensitivity with which mouse movements alter the camera position.\nSet to 0.00 to disable this feature entirely." },
             new OpLabel(t, y+=h, "[EXPERIMENTAL] Resolution Scale"),
-            new OpUpdown(ResolutionScale, new(x, y), w, 2) { description = "EXPERIMENTAL: Scales the resolution of the level texture to allow for finer details. It is recommended to set Optimization to around the same value.\nThe texture is normally ~1366x768, so for Full HD (1080p) set this ~= 1.41." },
+            new OpUpdown(ResolutionScale, new(x, y), w, 2) { description = "EXPERIMENTAL: Scales the resolution of the level texture to allow for finer details. It is recommended to set Optimization to around the same value.\nSET THIS TO 1.00 TO DISABLE RESOLUTION SCALING. Your recommended Resolution Scale ~= " + displayScaleString },
             new OpLabel(t+w, y+=h, "Distance Curve"), //keep this as the last option!
             new OpListBox(SmoothingType, new(x, y - 90f), w+w, smoothingValues) { description = "Makes the parallax effect more noticable by warping (horizontally) closer objects more. SINUSOIDAL produces the most pleasing and realistic result.\nLINEAR is the most optimized. INVERSE reduces the warping around the player, which might be nice for gameplay." },
             new OpLabel(t + w, y+=h-90f, "Depth Curve"),

@@ -170,11 +170,11 @@ half4 frag (v2f i) : SV_Target
 	float redColorMod = 0;
 
 	uint totalTests = min(TheLazyCowboy1_TestNum, 300); //lazy way to limit loop size
-	float2 grabPos = i.uv + moveStep * (float)totalTests * TheLazyCowboy1_StepSize;
+	float2 grabPos = i.uv + moveStep * totalTests * TheLazyCowboy1_StartOffset;
 	uint counter = 0;
 	float noiseVal = tex2D(_NoiseTex2, i.uv).x;
 	float percentage = TheLazyCowboy1_StartOffset
-		+ 0.25f * TheLazyCowboy1_StepSize * max(noiseVal - 0.2f, 0) //a SIGNIFICANT warp in order to break up straight lines...
+		+ 0.25f * TheLazyCowboy1_StepSize * max(noiseVal - 0.2f, 0) //a SIGNIFICANT shift (up to 1/5th step) in order to break up straight lines...
 		+ 0.0009765625f; //add a very tiny margin of error: 1/1024
 	uint notFound = 1; //saves A LOT of processing, unless CLOSESTPIXELONLY is chosen
 

@@ -113,7 +113,7 @@ public partial class Plugin : BaseUnityPlugin
     {
         try
         {
-            if (Options.ResolutionScale.Value != 1f && id == LevelTexCombiner.firstPass)
+            if (Options.ResolutionScaleEnabled.Value && Options.ResolutionScale.Value != 1f && id == LevelTexCombiner.firstPass)
             {
                 self.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
                 self.combinedLevelTex.filterMode = 0;
@@ -281,6 +281,7 @@ public partial class Plugin : BaseUnityPlugin
         int testNum = (int)Mathf.Ceil(Options.Warp.Value * Options.MaxWarpFactor.Value * (Options.EndOffset.Value - startOffset) / Options.Optimization.Value);
         Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum);
         Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (Options.EndOffset.Value - startOffset) / testNum);
+        //Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", Options.Optimization.Value);
 
         Shader.SetGlobalFloat("TheLazyCowboy1_StartOffset", startOffset);
         Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);

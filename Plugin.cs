@@ -58,6 +58,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
 
             On.CustomDecal.DrawSprites -= CustomDecal_DrawSprites;
+            On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
+            On.BackgroundScene.DrawPos -= BackgroundScene_DrawPos;
 
             On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
 
@@ -82,6 +84,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.GetCameraBestIndex += RoomCamera_GetCameraBestIndex;
 
             On.CustomDecal.DrawSprites += CustomDecal_DrawSprites;
+            On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
+            On.BackgroundScene.DrawPos += BackgroundScene_DrawPos;
 
             On.Watcher.LevelTexCombiner.CreateBuffer += LevelTexCombiner_CreateBuffer;
 
@@ -106,6 +110,55 @@ public partial class Plugin : BaseUnityPlugin
         {
             Logger.LogError(ex);
             throw;
+        }
+    }
+
+    private Vector2 BackgroundScene_DrawPos(On.BackgroundScene.orig_DrawPos orig, BackgroundScene self, Vector2 pos, float depth, Vector2 camPos, float hDisplace)
+    {
+        if (Options.BackgroundWarp.Value > 0)
+        {
+            var cameras = self.room.game.cameras;
+            float lowestCamDist = float.PositiveInfinity;
+            RoomCamera lowestCam = null;
+            foreach (var cam in cameras)
+            {
+                float dist = (cam.pos - camPos).sqrMagnitude;
+                if (cam.room == self.room && dist < lowestCamDist) { lowestCamDist = dist; lowestCam = cam; }
+            }
+
+            if (lowestCam != null && CamPos.TryGetValue(lowestCam.cameraNumber, out float2 playerPos))
+            {
+                Vector2 warp = Options.Warp.Value * Options.BackgroundWarp.Value
+                    * new Vector2(sinSmoothCurve(0.5f - playerPos.x), sinSmoothCurve(0.5f - playerPos.y));
+                if (Options.NoCenterWarp.Value)
+                {
+                    warp.x *= 2f * Mathf.Abs(playerPos.x - 0.5f);
+                    warp.y *= 2f * Mathf.Abs(playerPos.y - 0.5f);
+                }
+
+                camPos += warp;
+            }
+        }
+        return orig(self, pos, depth, camPos, hDisplace);
+    }
+
+    private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
+    {
+        orig(self, timeStacker, timeSpeed);
+
+        //warp background
+        if (Options.BackgroundWarp.Value > 0 && self.backgroundGraphic.isVisible && CamPos.TryGetValue(self.cameraNumber, out float2 pos))
+        {
+            Vector2 warp = Options.Warp.Value * Options.BackgroundWarp.Value
+                * new Vector2(sinSmoothCurve(0.5f - pos.x), sinSmoothCurve(0.5f - pos.y));
+            if (Options.NoCenterWarp.Value)
+            {
+                warp.x *= 2f * Mathf.Abs(pos.x - 0.5f);
+                warp.y *= 2f * Mathf.Abs(pos.y - 0.5f);
+            }
+
+            self.backgroundGraphic.x = self.backgroundGraphic.x - warp.x;
+            self.backgroundGraphic.y = self.backgroundGraphic.y - warp.y;
         }
     }
 
@@ -163,7 +216,7 @@ public partial class Plugin : BaseUnityPlugin
 
         try
         {
-            if (Options.WarpDecals.Value && CamPos.TryGetValue(rCam, out float2 pos))
+            if (Options.WarpDecals.Value && CamPos.TryGetValue(rCam.cameraNumber, out float2 pos))
             {
                 for (int i = 0; i < self.verts.Length; i++)
                 {
@@ -192,7 +245,7 @@ public partial class Plugin : BaseUnityPlugin
     }
 
     //public static float2 CamPos;
-    public static Dictionary<RoomCamera, float2> CamPos = new();
+    public static Dictionary<int, float2> CamPos = new(4);
 
     private void RoomCamera_GetCameraBestIndex(On.RoomCamera.orig_GetCameraBestIndex orig, RoomCamera self)
     {
@@ -204,8 +257,8 @@ public partial class Plugin : BaseUnityPlugin
             Vector2? critPos = (crit.inShortcut ? self.game.shortcuts.OnScreenPositionOfInShortCutCreature(self.room, crit) : crit.mainBodyChunk.pos);
             if (critPos != null)
             {
-                if (!CamPos.ContainsKey(self))
-                    CamPos.Add(self, new(0.5f, 0.5f));
+                if (!CamPos.ContainsKey(self.cameraNumber))
+                    CamPos.Add(self.cameraNumber, new(0.5f, 0.5f));
 
                 //Vector2 localPos = (critPos.Value - self.CamPos(self.currentCameraPosition)
                 //Vector2 localPos = (critPos.Value - self.levelGraphic.GetPosition()
@@ -236,16 +289,16 @@ public partial class Plugin : BaseUnityPlugin
                 localPos.x = Mathf.Clamp01(localPos.x);
                 localPos.y = Mathf.Clamp01(localPos.y);
 
-                CamPos[self] += Options.CameraMoveSpeed.Value * (new float2(localPos.x, localPos.y) - CamPos[self]);
+                CamPos[self.cameraNumber] += Options.CameraMoveSpeed.Value * (new float2(localPos.x, localPos.y) - CamPos[self.cameraNumber]);
                 if (Options.InvertPos.Value)
                 {
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - CamPos[self].x);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - CamPos[self].y);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - CamPos[self.cameraNumber].x);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - CamPos[self.cameraNumber].y);
                 }
                 else
                 {
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", CamPos[self].x);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", CamPos[self].y);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", CamPos[self.cameraNumber].x);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", CamPos[self.cameraNumber].y);
                 }
             }
         }

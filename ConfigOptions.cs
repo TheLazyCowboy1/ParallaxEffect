@@ -15,21 +15,22 @@ public class ConfigOptions : OptionInterface
     public ConfigOptions()
     {
         //AllSlugcats = this.config.Bind<bool>("AllSlugcats", false);
-        Warp = this.config.Bind<float>("Warp", 25f, new ConfigAcceptableRange<float>(2f, 200f));
+        Warp = this.config.Bind<float>("Warp", 25, new ConfigAcceptableRange<float>(2, 200));
         //MaxWarp = this.config.Bind<float>("MaxWarp", 20f, new ConfigAcceptableRange<float>(0, 100f));
-        MaxWarpFactor = this.config.Bind<float>("MaxWarpFactor", 0.9f, new ConfigAcceptableRange<float>(0.1f, 1f));
-        Optimization = this.config.Bind<float>("Optimization", 1f, new ConfigAcceptableRange<float>(0.2f, 10f));
-        StartOffset = this.config.Bind<float>("StartOffset", -0.1f, new ConfigAcceptableRange<float>(-1f, 0f));
+        MaxWarpFactor = this.config.Bind<float>("MaxWarpFactor", 0.9f, new ConfigAcceptableRange<float>(0.1f, 1));
+        Optimization = this.config.Bind<float>("Optimization", 1, new ConfigAcceptableRange<float>(0.2f, 10));
+        StartOffset = this.config.Bind<float>("StartOffset", -0.1f, new ConfigAcceptableRange<float>(-1, 0));
         //EndOffset = this.config.Bind<float>("EndOffset", 1f, new ConfigAcceptableRange<float>(0.1f, 2f));
-        RedModScale = this.config.Bind<float>("RedModScale", 0.7f, new ConfigAcceptableRange<float>(0f, 10f));
+        RedModScale = this.config.Bind<float>("RedModScale", 0.7f, new ConfigAcceptableRange<float>(0f, 10));
         ClosestPixelOnly = this.config.Bind<bool>("ClosestPixelOnly", false);
         InvertPos = this.config.Bind<bool>("InvertPos", false);
         NoCenterWarp = this.config.Bind<bool>("NoCenterWarp", false);
-        CameraMoveSpeed = this.config.Bind<float>("CameraMoveSpeed", 0.1f, new ConfigAcceptableRange<float>(0, 1f));
+        CameraMoveSpeed = this.config.Bind<float>("CameraMoveSpeed", 0.1f, new ConfigAcceptableRange<float>(0, 1));
         WarpDecals = this.config.Bind<bool>("WarpDecals", true);
-        MouseSensitivity = this.config.Bind<float>("MouseSensitivity", 0.25f, new ConfigAcceptableRange<float>(0, 1f));
+        BackgroundWarp = this.config.Bind<float>("BackgroundWarp", 1, new ConfigAcceptableRange<float>(0, 5));
+        MouseSensitivity = this.config.Bind<float>("MouseSensitivity", 0.25f, new ConfigAcceptableRange<float>(0, 1));
         ResolutionScaleEnabled = this.config.Bind<bool>("ResolutionScaleEnabled", false);
-        ResolutionScale = this.config.Bind<float>("ResolutionScale", 1f, new ConfigAcceptableRange<float>(0.5f, 5f));
+        ResolutionScale = this.config.Bind<float>("ResolutionScale", 1, new ConfigAcceptableRange<float>(0.5f, 5));
         SmoothingType = this.config.Bind<string>("SmoothingType", "SINUSOIDAL", new ConfigAcceptableList<string>(smoothingValues));
         DepthCurve = this.config.Bind<string>("DepthCurve", "PARABOLIC", new ConfigAcceptableList<string>(depthCurveValues));
     }
@@ -48,6 +49,7 @@ public class ConfigOptions : OptionInterface
     public readonly Configurable<bool> NoCenterWarp;
     public readonly Configurable<float> CameraMoveSpeed;
     public readonly Configurable<bool> WarpDecals; //what about making this a config? we probably don't have to re-warp EVERY frame
+    public readonly Configurable<float> BackgroundWarp;
     public readonly Configurable<float> MouseSensitivity;
     public readonly Configurable<bool> ResolutionScaleEnabled;
     public readonly Configurable<float> ResolutionScale;
@@ -81,7 +83,7 @@ public class ConfigOptions : OptionInterface
             displayScaleString += $"{displayScales[i]} ({Display.displays[i].systemHeight}p)";
         }
 
-        float t = 150f, y = 560f, h = -35f, x = 50f, w = 80f, c = 50f;
+        float t = 150f, y = 560f, h = -40f, x = 50f, w = 80f, c = 50f;
         float t2 = 400f, x2 = 300f;
 
 
@@ -109,6 +111,8 @@ public class ConfigOptions : OptionInterface
                 new OpCheckBox(NoCenterWarp, x2 + c, y) { description = "Makes the warp factor scale according to how far away the player is from the center of the screen.\nThis means that the room will look totally normal when the player is in the center of the room." },
             new OpLabel(t, y += h, "Warp Decals"),
             new OpCheckBox(WarpDecals, x + c, y) { description = "Also warps decals added through dev tools. These are common occurrences.\nNOTE: Runs on the CPU, not on the GPU!! If there are a lot of decals, this will increase lag." },
+            new OpLabel(t, y += h, "Background Warp/Offset"),
+            new OpUpdown(BackgroundWarp, new(x, y), w, 2) { description = "How much to offset the background graphic, in order to make it more consistent with the parallax effect. Expressed as a fraction of the Warp Factor.\nSet to 0.00 to disable. 1.00 == same as deepest object. >1 == warp more than foreground." },
             new OpLabel(t, y += h, "Camera Move Speed"),
             new OpUpdown(CameraMoveSpeed, new(x, y), w, 2) { description = "How quickly the camera adjusts to position changes.\n1.00 = instantaneously; 0.00 = not at all; 0.10 = slowly." },
                 new OpLabel(t2, y, "Mouse Sensitivity"),
@@ -120,10 +124,10 @@ public class ConfigOptions : OptionInterface
         optionsTab.AddItems(
             resolutionScaleCheckbox,
             resolutionScaleUpdown,
-            new OpLabel(t+w, y+=h, "Distance Curve"), //keep this as the last option!
-            new OpListBox(SmoothingType, new(x, y - 90f), w+w, smoothingValues) { description = "Makes the parallax effect more noticable by warping (horizontally) closer objects more. SINUSOIDAL produces the most pleasing and realistic result.\nLINEAR is the most optimized. INVERSE reduces the warping around the player, which might be nice for gameplay." },
-            new OpLabel(t + w, y+=h-90f, "Depth Curve"), //maybe could shift this to the right if we're running out of room?
-            new OpListBox(DepthCurve, new(x, y - 90f), w + w, depthCurveValues) { description = "EXTREME and PARABOLIC make shallower (closer) objects be warped more. INVERSE makes the effect negligible on shallow objects.\nIf LINEAR (fastest and most visually accurate setting), the deepest background is warped 5x more than the back wall, which I thought was too drastic." }
+            new OpLabel(t+w-20f, y+=h, "Distance Curve"), //keep this as the last option!
+            new OpListBox(SmoothingType, new(x-20f, y - 90f), w+w, smoothingValues) { description = "Makes the parallax effect more noticable by warping (horizontally) closer objects more. SINUSOIDAL produces the most pleasing and realistic result.\nLINEAR is the most optimized. INVERSE reduces the warping around the player, which might be nice for gameplay." },
+                new OpLabel(t2+w+20f, y, "Depth Curve"), //maybe could shift this to the right if we're running out of room?
+                new OpListBox(DepthCurve, new(x2+20f, y - 90f), w+w, depthCurveValues) { description = "EXTREME and PARABOLIC make shallower (closer) objects be warped more. INVERSE makes the effect negligible on shallow objects.\nIf LINEAR (fastest and most visually accurate setting), the deepest background is warped 5x more than the back wall, which I thought was too drastic." }
             );
 
         if (!ResolutionScaleEnabled.Value)

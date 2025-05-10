@@ -32,6 +32,7 @@ public partial class Plugin : BaseUnityPlugin
 
     public static ConfigOptions Options;
 
+    #region Setup
     public Plugin()
     {
         try
@@ -60,6 +61,12 @@ public partial class Plugin : BaseUnityPlugin
             On.CustomDecal.DrawSprites -= CustomDecal_DrawSprites;
             On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
             On.BackgroundScene.DrawPos -= BackgroundScene_DrawPos;
+            On.BackgroundScene.Update -= BackgroundScene_Update;
+            //On.BackgroundScene.BackgroundSceneElement.DrawSprites -= BackgroundSceneElement_DrawSprites;
+            On.BackgroundScene.Simple2DBackgroundIllustration.DrawSprites -= Simple2DBackgroundIllustration_DrawSprites;
+            On.AboveCloudsView.CloseCloud.DrawSprites -= CloseCloud_DrawSprites;
+            On.AboveCloudsView.DistantCloud.DrawSprites -= DistantCloud_DrawSprites;
+            On.AboveCloudsView.FlyingCloud.DrawSprites -= FlyingCloud_DrawSprites;
 
             On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
 
@@ -86,6 +93,12 @@ public partial class Plugin : BaseUnityPlugin
             On.CustomDecal.DrawSprites += CustomDecal_DrawSprites;
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.BackgroundScene.DrawPos += BackgroundScene_DrawPos;
+            On.BackgroundScene.Update += BackgroundScene_Update;
+            //On.BackgroundScene.BackgroundSceneElement.DrawSprites += BackgroundSceneElement_DrawSprites;
+            On.BackgroundScene.Simple2DBackgroundIllustration.DrawSprites += Simple2DBackgroundIllustration_DrawSprites;
+            On.AboveCloudsView.CloseCloud.DrawSprites += CloseCloud_DrawSprites;
+            On.AboveCloudsView.DistantCloud.DrawSprites += DistantCloud_DrawSprites;
+            On.AboveCloudsView.FlyingCloud.DrawSprites += FlyingCloud_DrawSprites;
 
             On.Watcher.LevelTexCombiner.CreateBuffer += LevelTexCombiner_CreateBuffer;
 
@@ -112,211 +125,10 @@ public partial class Plugin : BaseUnityPlugin
             throw;
         }
     }
+    #endregion
 
-    private Vector2 BackgroundScene_DrawPos(On.BackgroundScene.orig_DrawPos orig, BackgroundScene self, Vector2 pos, float depth, Vector2 camPos, float hDisplace)
-    {
-        if (Options.BackgroundWarp.Value > 0)
-        {
-            var cameras = self.room.game.cameras;
-            float lowestCamDist = float.PositiveInfinity;
-            RoomCamera lowestCam = null;
-            foreach (var cam in cameras)
-            {
-                float dist = (cam.pos - camPos).sqrMagnitude;
-                if (cam.room == self.room && dist < lowestCamDist) { lowestCamDist = dist; lowestCam = cam; }
-            }
-
-            if (lowestCam != null && CamPos.TryGetValue(lowestCam.cameraNumber, out float2 playerPos))
-            {
-                Vector2 warp = Options.Warp.Value * Options.BackgroundWarp.Value
-                    * new Vector2(sinSmoothCurve(0.5f - playerPos.x), sinSmoothCurve(0.5f - playerPos.y));
-                if (Options.NoCenterWarp.Value)
-                {
-                    warp.x *= 2f * Mathf.Abs(playerPos.x - 0.5f);
-                    warp.y *= 2f * Mathf.Abs(playerPos.y - 0.5f);
-                }
-
-                camPos += warp;
-            }
-        }
-        return orig(self, pos, depth, camPos, hDisplace);
-    }
-
-    private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
-    {
-        orig(self, timeStacker, timeSpeed);
-
-        //warp background
-        if (Options.BackgroundWarp.Value > 0 && self.backgroundGraphic.isVisible && CamPos.TryGetValue(self.cameraNumber, out float2 pos))
-        {
-            Vector2 warp = Options.Warp.Value * Options.BackgroundWarp.Value
-                * new Vector2(sinSmoothCurve(0.5f - pos.x), sinSmoothCurve(0.5f - pos.y));
-            if (Options.NoCenterWarp.Value)
-            {
-                warp.x *= 2f * Mathf.Abs(pos.x - 0.5f);
-                warp.y *= 2f * Mathf.Abs(pos.y - 0.5f);
-            }
-
-            self.backgroundGraphic.x = self.backgroundGraphic.x - warp.x;
-            self.backgroundGraphic.y = self.backgroundGraphic.y - warp.y;
-        }
-    }
-
-    private void LevelTexCombiner_CreateBuffer(On.Watcher.LevelTexCombiner.orig_CreateBuffer orig, LevelTexCombiner self, string id, RenderTargetIdentifier texture, Material material, CameraEvent evt)
-    {
-        try
-        {
-            if (Options.ResolutionScaleEnabled.Value && Options.ResolutionScale.Value != 1f && id == LevelTexCombiner.firstPass)
-            {
-                self.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
-                self.combinedLevelTex.filterMode = 0;
-                self.intermediateTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
-                self.intermediateTex.filterMode = 0;
-                Shader.SetGlobalTexture("_LevelTex", self.combinedLevelTex);
-            }
-
-            orig(self, id, texture, material, evt);
-        }
-        catch (Exception ex) { Logger.LogError(ex); }
-    }
-
-    float depthCurve(float d)
-    {
-        switch (Options.DepthCurve.Value)
-        {
-            case "EXTREME":
-                return d * (d * (d - 3) + 3); //much more severe, cubic curve
-            case "PARABOLIC": //this case enables BOTH options... to indicate a "compromise" or something...?
-                return d * (2 - d); //simple parabola
-            case "INVERSE":
-                return 0.5f*d * (d*d + 1); //averages d^3 with d
-        }
-        return d; //linear
-    }
-    float approxSine(float x)
-    {
-        return x * (1.5f - 0.5f * x * x); //this is a really cheap but more than adaquate approximation!
-    }
-    float sinSmoothCurve(float x)
-    {
-        switch (Options.SmoothingType.Value)
-        {
-            case "EXTREME":
-                return 0.125f*x*(15 + x*x*(-10 + x*x*3));
-            case "SINUSOIDAL":
-                return approxSine(x);
-            case "INVERSE":
-                return x + x - approxSine(x);
-        }
-        return x;
-    }
-    private void CustomDecal_DrawSprites(On.CustomDecal.orig_DrawSprites orig, CustomDecal self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
-    {
-        orig(self, sLeaser, rCam, timeStacker, camPos);
-
-        try
-        {
-            if (Options.WarpDecals.Value && CamPos.TryGetValue(rCam.cameraNumber, out float2 pos))
-            {
-                for (int i = 0; i < self.verts.Length; i++)
-                {
-                    Vector2 localVert = self.verts[i] - camPos;
-                    if (localVert.x >= 0 && localVert.x < rCam.sSize.x
-                        && localVert.y >= 0 && localVert.y < rCam.sSize.y) //simple bounds check
-                    {
-                        //Vector2 warp = Options.Warp.Value * depthCurve(rCam.DepthAtCoordinate(self.verts[i]) * 1.2f - 0.2f)
-                        var data = self.placedObject.data as PlacedObject.CustomDecalData; //use flat data instead of image depth?
-                        //use the decal's depth (weighted towards the deeper part) to determine a warp factor
-                        Vector2 warp = Options.Warp.Value * depthCurve((0.3f*data.fromDepth + 0.7f*data.toDepth - 5f) * 0.04f)
-                            * new Vector2(sinSmoothCurve(localVert.x / 1400f - pos.x), sinSmoothCurve(localVert.y / 800f - pos.y));
-                            //* new Vector2(sinSmoothCurve(self.verts[i].x / 1400f - pos.x), sinSmoothCurve(self.verts[i].y / 800f - pos.y));
-                        if (Options.NoCenterWarp.Value)
-                        {
-                            warp.x *= 2f * Mathf.Abs(pos.x - 0.5f);
-                            warp.y *= 2f * Mathf.Abs(pos.y - 0.5f);
-                        }
-                        //(sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, self.verts[i] - camPos + warp);
-                        (sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, localVert + warp);
-                    }
-                }
-            }
-        }
-        catch (Exception ex) { Logger.LogError(ex); }
-    }
-
-    //public static float2 CamPos;
-    public static Dictionary<int, float2> CamPos = new(4);
-
-    private void RoomCamera_GetCameraBestIndex(On.RoomCamera.orig_GetCameraBestIndex orig, RoomCamera self)
-    {
-        orig(self);
-
-        var crit = self.followAbstractCreature?.realizedCreature;
-        if (crit != null)
-        {
-            Vector2? critPos = (crit.inShortcut ? self.game.shortcuts.OnScreenPositionOfInShortCutCreature(self.room, crit) : crit.mainBodyChunk.pos);
-            if (critPos != null)
-            {
-                if (!CamPos.ContainsKey(self.cameraNumber))
-                    CamPos.Add(self.cameraNumber, new(0.5f, 0.5f));
-
-                //Vector2 localPos = (critPos.Value - self.CamPos(self.currentCameraPosition)
-                //Vector2 localPos = (critPos.Value - self.levelGraphic.GetPosition()
-                Vector2 localPos = (critPos.Value - self.pos
-                    + (self.followCreatureInputForward + self.leanPos) * 2f)
-                    / self.sSize;
-
-                try
-                {
-                    float mouseX = Input.GetAxis("Mouse X") * 0.25f;
-                    if (mouseX != 0f)
-                    {
-                        float strength = Mathf.Clamp01(Mathf.Abs(mouseX));
-                        //mouseX = 0.5f + 0.5f * Mathf.Clamp(mouseX, -1f, 1f);
-                        localPos.x += strength * ((mouseX > 0 ? 0.8f : -0.8f) - localPos.x);
-                    }
-
-                    float mouseY = Input.GetAxis("Mouse Y") * 0.25f * 0.5625f; //0.5625 = 9/16 
-                    if (mouseY != 0f)
-                    {
-                        float strength = Mathf.Clamp01(Mathf.Abs(mouseY));
-                        //mouseY = 0.5f + 0.5f * Mathf.Clamp(mouseY, -1f, 1f);
-                        localPos.y += strength * ((mouseY > 0 ? 0.8f : -0.8f) - localPos.y);
-                    }
-                }
-                catch { }
-
-                localPos.x = Mathf.Clamp01(localPos.x);
-                localPos.y = Mathf.Clamp01(localPos.y);
-
-                CamPos[self.cameraNumber] += Options.CameraMoveSpeed.Value * (new float2(localPos.x, localPos.y) - CamPos[self.cameraNumber]);
-                if (Options.InvertPos.Value)
-                {
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - CamPos[self.cameraNumber].x);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - CamPos[self.cameraNumber].y);
-                }
-                else
-                {
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", CamPos[self.cameraNumber].x);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", CamPos[self.cameraNumber].y);
-                }
-            }
-        }
-    }
-
-    private void RoomCamera_ApplyPositionChange(On.RoomCamera.orig_ApplyPositionChange orig, RoomCamera self)
-    {
-        orig(self);
-
-        //Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", self.levelTexture);
-        try
-        {
-            //self.levelTexCombiner.AddPass(RenderTexture.GetTemporary(1400, 800), parallaxMaterial, parallaxShader.name, LevelTexCombiner.last);
-            self.levelTexCombiner.AddPass(parallaxShader, parallaxShader.name, LevelTexCombiner.last);
-            //Logger.LogDebug($"Added {parallaxShader.name} shader pass!"); //happens every screen change; annoying log spam
-        } catch (Exception ex) { Logger.LogError(ex); }
-    }
-
+    #region CameraHooks
+    //Sets/calculates the shader constants
     private void RoomCamera_ctor(On.RoomCamera.orig_ctor orig, RoomCamera self, RainWorldGame game, int cameraNumber)
     {
         //WarpedLevelTextures.Clear(); //just in case
@@ -401,4 +213,320 @@ public partial class Plugin : BaseUnityPlugin
         //shaderSprite.shader = parallaxFShader;
         //self.ReturnFContainer("Foreground").AddChildAtIndex(shaderSprite, 1);
     }
+
+    //Actually adds the shader to the LevelTexCombiner whenever the LevelTexCombiner gets cleared
+    private void RoomCamera_ApplyPositionChange(On.RoomCamera.orig_ApplyPositionChange orig, RoomCamera self)
+    {
+        orig(self);
+
+        //Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", self.levelTexture);
+        try
+        {
+            //self.levelTexCombiner.AddPass(RenderTexture.GetTemporary(1400, 800), parallaxMaterial, parallaxShader.name, LevelTexCombiner.last);
+            self.levelTexCombiner.AddPass(parallaxShader, parallaxShader.name, LevelTexCombiner.last);
+            //Logger.LogDebug($"Added {parallaxShader.name} shader pass!"); //happens every screen change; annoying log spam
+        }
+        catch (Exception ex) { Logger.LogError(ex); }
+    }
+
+
+    //public static float2 CamPos;
+    public static Dictionary<int, float2> CamPos = new(4);
+    public static Dictionary<int, Vector2> MidpointWarp = new(4);
+
+    //Sets the CamPos
+    private void RoomCamera_GetCameraBestIndex(On.RoomCamera.orig_GetCameraBestIndex orig, RoomCamera self)
+    {
+        orig(self);
+
+        var crit = self.followAbstractCreature?.realizedCreature;
+        if (crit != null)
+        {
+            Vector2? critPos = (crit.inShortcut ? self.game.shortcuts.OnScreenPositionOfInShortCutCreature(self.room, crit) : crit.mainBodyChunk.pos);
+            if (critPos != null)
+            {
+                if (!CamPos.ContainsKey(self.cameraNumber))
+                    CamPos.Add(self.cameraNumber, new(0.5f, 0.5f));
+
+                //Vector2 localPos = (critPos.Value - self.CamPos(self.currentCameraPosition)
+                //Vector2 localPos = (critPos.Value - self.levelGraphic.GetPosition()
+                Vector2 localPos = (critPos.Value - self.pos
+                    + (self.followCreatureInputForward + self.leanPos) * 2f)
+                    / self.sSize;
+
+                try
+                {
+                    float mouseX = Input.GetAxis("Mouse X") * 0.25f;
+                    if (mouseX != 0f)
+                    {
+                        float strength = Mathf.Clamp01(Mathf.Abs(mouseX));
+                        //mouseX = 0.5f + 0.5f * Mathf.Clamp(mouseX, -1f, 1f);
+                        localPos.x += strength * ((mouseX > 0 ? 0.8f : -0.8f) - localPos.x);
+                    }
+
+                    float mouseY = Input.GetAxis("Mouse Y") * 0.25f * 0.5625f; //0.5625 = 9/16 
+                    if (mouseY != 0f)
+                    {
+                        float strength = Mathf.Clamp01(Mathf.Abs(mouseY));
+                        //mouseY = 0.5f + 0.5f * Mathf.Clamp(mouseY, -1f, 1f);
+                        localPos.y += strength * ((mouseY > 0 ? 0.8f : -0.8f) - localPos.y);
+                    }
+                }
+                catch { }
+
+                localPos.x = Mathf.Clamp01(localPos.x);
+                localPos.y = Mathf.Clamp01(localPos.y);
+
+                CamPos[self.cameraNumber] += Options.CameraMoveSpeed.Value * (new float2(localPos.x, localPos.y) - CamPos[self.cameraNumber]);
+                if (Options.InvertPos.Value)
+                {
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - CamPos[self.cameraNumber].x);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - CamPos[self.cameraNumber].y);
+                }
+                else
+                {
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", CamPos[self.cameraNumber].x);
+                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", CamPos[self.cameraNumber].y);
+                }
+
+
+                MidpointWarp.Remove(self.cameraNumber); //cam pos changed, so midpoint needs to be recalculated if it's there
+            }
+        }
+    }
+    private Vector2 GetMidpointWarp(int cameraNumber)
+    {
+        if (!MidpointWarp.ContainsKey(cameraNumber)) MidpointWarp.Add(cameraNumber, CalculateWarp(new(0.5f, 0.5f), CamPos[cameraNumber]));
+        return MidpointWarp[cameraNumber];
+    }
+
+
+    //Resolution Scaling
+    private void LevelTexCombiner_CreateBuffer(On.Watcher.LevelTexCombiner.orig_CreateBuffer orig, LevelTexCombiner self, string id, RenderTargetIdentifier texture, Material material, CameraEvent evt)
+    {
+        try
+        {
+            if (Options.ResolutionScaleEnabled.Value && Options.ResolutionScale.Value != 1f && id == LevelTexCombiner.firstPass)
+            {
+                self.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
+                self.combinedLevelTex.filterMode = 0;
+                self.intermediateTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
+                self.intermediateTex.filterMode = 0;
+                Shader.SetGlobalTexture("_LevelTex", self.combinedLevelTex);
+            }
+
+            orig(self, id, texture, material, evt);
+        }
+        catch (Exception ex) { Logger.LogError(ex); }
+    }
+
+
+    #endregion
+
+    #region WarpCalc
+    //Warps decals placed through dev tools
+    private void CustomDecal_DrawSprites(On.CustomDecal.orig_DrawSprites orig, CustomDecal self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+
+        try
+        {
+            if (Options.WarpDecals.Value && CamPos.TryGetValue(rCam.cameraNumber, out float2 pos))
+            {
+                for (int i = 0; i < self.verts.Length; i++)
+                {
+                    Vector2 localVert = self.verts[i] - camPos;
+                    if (localVert.x >= 0 && localVert.x < rCam.sSize.x
+                        && localVert.y >= 0 && localVert.y < rCam.sSize.y) //simple bounds check
+                    {
+                        var data = self.placedObject.data as PlacedObject.CustomDecalData; //use flat data instead of image depth?
+                        //Vector2 warp = Options.Warp.Value * depthCurve(rCam.DepthAtCoordinate(self.verts[i]) * 1.2f - 0.2f)
+                        //use the decal's depth (weighted towards the deeper part) to determine a warp factor
+                        Vector2 warp = depthCurve((0.3f * data.fromDepth + 0.7f * data.toDepth - 5f) * 0.04f) * CalculateWarp(localVert / rCam.sSize, pos);
+
+                        (sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, localVert + warp);
+                    }
+                }
+            }
+        }
+        catch (Exception ex) { Logger.LogError(ex); }
+    }
+
+    //Attempts to warp background image, which I'm not sure is ever even used...
+    private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
+    {
+        orig(self, timeStacker, timeSpeed);
+
+        //warp background
+        if (Options.BackgroundWarp.Value > 0 && self.backgroundGraphic.isVisible && CamPos.ContainsKey(self.cameraNumber))
+        {
+            
+            Vector2 warp = Options.BackgroundWarp.Value * GetMidpointWarp(self.cameraNumber);
+
+            self.backgroundGraphic.x = self.backgroundGraphic.x - warp.x;
+            self.backgroundGraphic.y = self.backgroundGraphic.y - warp.y;
+        }
+    }
+
+    //Offsets the camera position used for backgrounds, helping to provide basic visual continuity
+    private Vector2 BackgroundScene_DrawPos(On.BackgroundScene.orig_DrawPos orig, BackgroundScene self, Vector2 pos, float depth, Vector2 camPos, float hDisplace)
+    {
+        if (Options.BackgroundWarp.Value > 0)
+        {
+            var cameras = self.room.game.cameras;
+            float lowestCamDist = float.PositiveInfinity;
+            RoomCamera lowestCam = null;
+            foreach (var cam in cameras)
+            {
+                float dist = (cam.pos - camPos).sqrMagnitude;
+                if (cam.room == self.room && dist < lowestCamDist) { lowestCamDist = dist; lowestCam = cam; }
+            }
+
+            if (lowestCam != null && CamPos.ContainsKey(lowestCam.cameraNumber))
+            {
+                camPos += Options.BackgroundWarp.Value * GetMidpointWarp(lowestCam.cameraNumber);
+            }
+        }
+        return orig(self, pos, depth, camPos, hDisplace);
+    }
+
+    //Warps the convergence point for backgrounds, giving a severe parallax effect
+    private void BackgroundScene_Update(On.BackgroundScene.orig_Update orig, BackgroundScene self, bool eu)
+    {
+        orig(self, eu);
+
+        if (Options.BackgroundRotation.Value > 0)
+        {
+            var cam = self.room.game.cameras.FirstOrDefault(c => c.room == self.room);
+            if (cam != null && CamPos.ContainsKey(cam.cameraNumber))
+            {
+                //reset convergence point in case I messed it up previously. Adapted from decompiled code
+                self.convergencePoint = new Vector2(self.room.game.rainWorld.screenSize.x * 0.5f,
+                    self.room.game.rainWorld.screenSize.y * (ModManager.DLCShared && self.room.waterInverted ? 1f : 2f) / 3f);
+
+                self.convergencePoint += Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);
+            }
+        }
+    }
+
+
+    //Attempts to force all background elements to have some basic warp
+    [Obsolete]
+    private void BackgroundSceneElement_DrawSprites(On.BackgroundScene.BackgroundSceneElement.orig_DrawSprites orig, BackgroundScene.BackgroundSceneElement self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+
+        //Applies some shift to elements that aren't normally shifted, like background images and (surprisingly) clouds
+        if ((Options.BackgroundWarp.Value > 0 || Options.BackgroundRotation.Value > 0)
+            && CamPos.TryGetValue(rCam.cameraNumber, out float2 pos)
+            && self is AboveCloudsView.Cloud or BackgroundScene.Simple2DBackgroundIllustration)
+        {
+            bool cloud = self is AboveCloudsView.Cloud;
+            //Vector2 realCamPos = (self.scene is AboveCloudsView acv) ? new(camPos.x, camPos.y + acv.yShift) : camPos;
+
+            bool firstSprite = true;
+            foreach (var sprite in sLeaser.sprites)
+            {
+                //Vector2 center = self.pos + rCam.sSize * 0.5f;//new Vector2(sprite.scaleX * sprite.width, sprite.scaleY * sprite.height);
+                //Vector2 warp = CalculateWarp(center, pos) * rCam.sSize / self.depth;
+                //Vector2 newPos = self.scene.DrawPos(center - self.scene.sceneOrigo, self.depth, Vector2.zero, rCam.hDisplace); //remember to offset it to corner not center
+                //sprite.x = newPos.x;
+                //sprite.y = newPos.y;
+
+                Vector2 center = self.pos + (cloud ? rCam.sSize * 0.5f : Vector2.zero);
+                Vector2 newCenter = (center - CalculateWarp(center, pos) - self.scene.convergencePoint) / self.depth + self.scene.convergencePoint;
+                Vector2 newPos = newCenter;// - rCam.sSize * 0.5f;
+                sprite.x = newPos.x + (firstSprite && cloud ? 683 : 0);
+                sprite.y = newPos.y;
+
+                firstSprite = false;
+            }
+        }
+    }
+
+    //Easily offsets any sprite
+    private void OffsetSprite(BackgroundScene.BackgroundSceneElement self, RoomCamera rCam, FSprite sprite, Vector2 pos, bool offsetX = true, bool offsetY = true)
+    {
+        if (Options.BackgroundWarp.Value > 0 && CamPos.ContainsKey(rCam.cameraNumber))
+        {
+            Vector2 newPos = pos + Options.BackgroundWarp.Value * GetMidpointWarp(rCam.cameraNumber);
+            if (offsetX) sprite.x = newPos.x;
+            if (offsetY) sprite.y = newPos.y;
+        }
+    }
+
+    //Warps background image
+    private void Simple2DBackgroundIllustration_DrawSprites(On.BackgroundScene.Simple2DBackgroundIllustration.orig_DrawSprites orig, BackgroundScene.Simple2DBackgroundIllustration self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+
+        OffsetSprite(self, rCam, sLeaser.sprites[0], self.pos);
+    }
+
+    //Warps clouds
+    private void CloseCloud_DrawSprites(On.AboveCloudsView.CloseCloud.orig_DrawSprites orig, AboveCloudsView.CloseCloud self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+
+        OffsetSprite(self, rCam, sLeaser.sprites[1], new(sLeaser.sprites[1].x, 0), true, false);
+    }
+    private void DistantCloud_DrawSprites(On.AboveCloudsView.DistantCloud.orig_DrawSprites orig, AboveCloudsView.DistantCloud self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+
+        OffsetSprite(self, rCam, sLeaser.sprites[1], new(sLeaser.sprites[1].x, 0), true, false);
+    }
+    private void FlyingCloud_DrawSprites(On.AboveCloudsView.FlyingCloud.orig_DrawSprites orig, AboveCloudsView.FlyingCloud self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+
+        OffsetSprite(self, rCam, sLeaser.sprites[0], new(sLeaser.sprites[0].x, 0), true, false);
+    }
+
+
+    private float depthCurve(float d)
+    {
+        switch (Options.DepthCurve.Value)
+        {
+            case "EXTREME":
+                return d * (d * (d - 3) + 3); //much more severe, cubic curve
+            case "PARABOLIC": //this case enables BOTH options... to indicate a "compromise" or something...?
+                return d * (2 - d); //simple parabola
+            case "INVERSE":
+                return 0.5f * d * (d * d + 1); //averages d^3 with d
+        }
+        return d; //linear
+    }
+    private static float approxSine(float x)
+    {
+        return x * (1.5f - 0.5f * x * x); //this is a really cheap but more than adaquate approximation!
+    }
+    private float sinSmoothCurve(float x)
+    {
+        switch (Options.SmoothingType.Value)
+        {
+            case "EXTREME":
+                return 0.125f * x * (15 + x * x * (-10 + x * x * 3));
+            case "SINUSOIDAL":
+                return approxSine(x);
+            case "INVERSE":
+                return x + x - approxSine(x);
+        }
+        return x;
+    }
+
+    public Vector2 CalculateWarp(Vector2 objPos, float2 playerPos)
+    {
+        Vector2 warp = new Vector2(sinSmoothCurve(objPos.x - playerPos.x), sinSmoothCurve(objPos.y - playerPos.y));
+        if (Options.NoCenterWarp.Value)
+        {
+            warp.x *= 2f * Mathf.Abs(playerPos.x - 0.5f);
+            warp.y *= 2f * Mathf.Abs(playerPos.y - 0.5f);
+        }
+        return Options.Warp.Value * new Vector2(
+            Mathf.Clamp(warp.x, -Options.MaxWarpFactor.Value, Options.MaxWarpFactor.Value),
+            Mathf.Clamp(warp.y, -Options.MaxWarpFactor.Value, Options.MaxWarpFactor.Value)
+            );
+    }
+    #endregion
 }

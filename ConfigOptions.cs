@@ -28,6 +28,7 @@ public class ConfigOptions : OptionInterface
         CameraMoveSpeed = this.config.Bind<float>("CameraMoveSpeed", 0.1f, new ConfigAcceptableRange<float>(0, 1));
         WarpDecals = this.config.Bind<bool>("WarpDecals", true);
         BackgroundWarp = this.config.Bind<float>("BackgroundWarp", 1, new ConfigAcceptableRange<float>(0, 5));
+        BackgroundRotation = this.config.Bind<float>("BackgroundRotation", 0.5f, new ConfigAcceptableRange<float>(0, 5));
         MouseSensitivity = this.config.Bind<float>("MouseSensitivity", 0.25f, new ConfigAcceptableRange<float>(0, 1));
         ResolutionScaleEnabled = this.config.Bind<bool>("ResolutionScaleEnabled", false);
         ResolutionScale = this.config.Bind<float>("ResolutionScale", 1, new ConfigAcceptableRange<float>(0.5f, 5));
@@ -50,6 +51,7 @@ public class ConfigOptions : OptionInterface
     public readonly Configurable<float> CameraMoveSpeed;
     public readonly Configurable<bool> WarpDecals; //what about making this a config? we probably don't have to re-warp EVERY frame
     public readonly Configurable<float> BackgroundWarp;
+    public readonly Configurable<float> BackgroundRotation;
     public readonly Configurable<float> MouseSensitivity;
     public readonly Configurable<bool> ResolutionScaleEnabled;
     public readonly Configurable<float> ResolutionScale;
@@ -111,8 +113,10 @@ public class ConfigOptions : OptionInterface
                 new OpCheckBox(NoCenterWarp, x2 + c, y) { description = "Makes the warp factor scale according to how far away the player is from the center of the screen.\nThis means that the room will look totally normal when the player is in the center of the room." },
             new OpLabel(t, y += h, "Warp Decals"),
             new OpCheckBox(WarpDecals, x + c, y) { description = "Also warps decals added through dev tools. These are common occurrences.\nNOTE: Runs on the CPU, not on the GPU!! If there are a lot of decals, this will increase lag." },
-            new OpLabel(t, y += h, "Background Warp/Offset"),
-            new OpUpdown(BackgroundWarp, new(x, y), w, 2) { description = "How much to offset the background graphic, in order to make it more consistent with the parallax effect. Expressed as a fraction of the Warp Factor.\nSet to 0.00 to disable. 1.00 == same as deepest object. >1 == warp more than foreground." },
+            new OpLabel(t, y += h, "Background Offset"),
+            new OpUpdown(BackgroundWarp, new(x, y), w, 2) { description = "How much to offset the background graphic, in order to make it more consistent with the parallax effect. Expressed as a fraction of the Warp Factor.\nSet to 0.00 to disable. 1.00 == same as deepest room object." },
+                new OpLabel(t2, y, "Background Rotation"),
+                new OpUpdown(BackgroundRotation, new(x2, y), w, 2) { description = "Warps the center-point of the in-game parallax effect for backgrounds, thus making them somewhat appear to rotate.\nSet to 0.00 to disable. 1.00 == same as the Warp Factor." },
             new OpLabel(t, y += h, "Camera Move Speed"),
             new OpUpdown(CameraMoveSpeed, new(x, y), w, 2) { description = "How quickly the camera adjusts to position changes.\n1.00 = instantaneously; 0.00 = not at all; 0.10 = slowly." },
                 new OpLabel(t2, y, "Mouse Sensitivity"),

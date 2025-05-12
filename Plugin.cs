@@ -22,6 +22,8 @@ using UnityEngine.Experimental.Rendering;
 
 namespace ParallaxEffect;
 
+[BepInDependency("SBCameraScroll", BepInDependency.DependencyFlags.SoftDependency)]
+
 [BepInPlugin(MOD_ID, MOD_NAME, MOD_VERSION)]
 public partial class Plugin : BaseUnityPlugin
 {
@@ -68,7 +70,7 @@ public partial class Plugin : BaseUnityPlugin
             On.AboveCloudsView.DistantCloud.DrawSprites -= DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites -= FlyingCloud_DrawSprites;
 
-            On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
+            //On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
 
             IsInit = false;
         }
@@ -100,7 +102,7 @@ public partial class Plugin : BaseUnityPlugin
             On.AboveCloudsView.DistantCloud.DrawSprites += DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites += FlyingCloud_DrawSprites;
 
-            On.Watcher.LevelTexCombiner.CreateBuffer += LevelTexCombiner_CreateBuffer;
+            //On.Watcher.LevelTexCombiner.CreateBuffer += LevelTexCombiner_CreateBuffer;
 
             //load shader
             try
@@ -215,6 +217,7 @@ public partial class Plugin : BaseUnityPlugin
     }
 
     //Actually adds the shader to the LevelTexCombiner whenever the LevelTexCombiner gets cleared
+    //ALSO attempts to resolution scale...
     private void RoomCamera_ApplyPositionChange(On.RoomCamera.orig_ApplyPositionChange orig, RoomCamera self)
     {
         orig(self);
@@ -222,8 +225,22 @@ public partial class Plugin : BaseUnityPlugin
         //Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", self.levelTexture);
         try
         {
-            //self.levelTexCombiner.AddPass(RenderTexture.GetTemporary(1400, 800), parallaxMaterial, parallaxShader.name, LevelTexCombiner.last);
-            self.levelTexCombiner.AddPass(parallaxShader, parallaxShader.name, LevelTexCombiner.last);
+            //Resolution Scale in a SBCameraScroll-friendly way
+            var t = self.levelTexCombiner;
+            if (Options.ResolutionScaleEnabled.Value)
+            {
+                if (!t.isActive)
+                    t.Initialize();
+                t.combinedLevelTex.Release();
+                t.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(t.combinedLevelTex.width * Options.ResolutionScale.Value), Mathf.RoundToInt(t.combinedLevelTex.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
+                t.combinedLevelTex.filterMode = 0;
+                t.intermediateTex.Release();
+                t.intermediateTex = new RenderTexture(Mathf.RoundToInt(t.intermediateTex.width * Options.ResolutionScale.Value), Mathf.RoundToInt(t.intermediateTex.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
+                t.intermediateTex.filterMode = 0;
+            }
+
+            //t.AddPass(RenderTexture.GetTemporary(1400, 800), parallaxMaterial, parallaxShader.name, LevelTexCombiner.last);
+            t.AddPass(parallaxShader, parallaxShader.name, LevelTexCombiner.last);
             //Logger.LogDebug($"Added {parallaxShader.name} shader pass!"); //happens every screen change; annoying log spam
         }
         catch (Exception ex) { Logger.LogError(ex); }
@@ -306,11 +323,13 @@ public partial class Plugin : BaseUnityPlugin
     {
         try
         {
-            if (Options.ResolutionScaleEnabled.Value && Options.ResolutionScale.Value != 1f && id == LevelTexCombiner.firstPass)
+            if (Options.ResolutionScaleEnabled.Value && (int)evt == 10)
             {
-                self.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
+                var source = Custom.rainWorld.persistentData.cameraTextures[0, 0];
+
+                self.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(source.width * Options.ResolutionScale.Value), Mathf.RoundToInt(source.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
                 self.combinedLevelTex.filterMode = 0;
-                self.intermediateTex = new RenderTexture(Mathf.RoundToInt(1400 * Options.ResolutionScale.Value), Mathf.RoundToInt(800 * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
+                self.intermediateTex = new RenderTexture(Mathf.RoundToInt(source.width * Options.ResolutionScale.Value), Mathf.RoundToInt(source.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
                 self.intermediateTex.filterMode = 0;
                 Shader.SetGlobalTexture("_LevelTex", self.combinedLevelTex);
             }

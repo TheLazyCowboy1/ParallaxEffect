@@ -104,7 +104,7 @@ public class ConfigOptions : OptionInterface
                 //new OpLabel(t2, y, "[ADVANCED] Maximum Tested Warp"),
                 //new OpUpdown(EndOffset, new(x2, y), w, 2) { description = "ADVANCED: Keep this at 1.00. In theory, raising it above 1.00 only increases lag, and lowering it from 1.00 creates visual artifacts.\nMight be useful to increase to ~1.05 if Don't Extend Objects is checked?" },
             new OpLabel(t, y += h, "Projection Steepness/Fade"),
-            new OpUpdown(RedModScale, new(x, y), w, 2) { description = "Scales how quickly warped things \"fade into the background.\"\nLow values = objects appear thick; High values = objects aren't \"projected backwards\" as noticably (they fade faster)." },
+            new OpUpdown(RedModScale, new(x, y), w, 2) { description = "Scales how quickly warped things \"fade into the background.\" It is recommended to set < 1 for PARABOLIC and EXTREME depth curves.\nLow values = objects appear thick; High values = objects aren't \"projected backwards\" as noticably (they fade faster)." },
             new OpLabel(t, y += h, "[EXPERIMENTAL] Don't Extend Objects"),
             new OpCheckBox(ClosestPixelOnly, x + c, y) { description = "EXPERIMENTAL: Disables the assumption that all objects extend indefinitely far back. Instead, the shader will find the \"closest pixel\" if an exact color cannot be found.\nThis inevitably has some obvious visual artifacts, and is MUCH more performance-intensive." },
             new OpLabel(t, y += h, "Invert Pos"),
@@ -123,8 +123,8 @@ public class ConfigOptions : OptionInterface
                 new OpUpdown(MouseSensitivity, new(x2, y), w, 2) { description = "The sensitivity with which mouse movements alter the camera position.\nSet to 0.00 to disable this feature entirely." },
             new OpLabel(t + c, y += h, "[EXPERIMENTAL] Resolution Scale")
             );
-        resolutionScaleCheckbox = new OpCheckBox(ResolutionScaleEnabled, x, y) { description = "Enables the experimental resolution scale option." };
-        resolutionScaleUpdown = new OpUpdown(ResolutionScale, new(x + c, y), w, 2) { description = "EXPERIMENTAL: Scales the resolution of the level texture to allow for finer details. It is recommended to set Optimization to around the same value.\nYour recommended Resolution Scale ~= " + displayScaleString };
+        resolutionScaleCheckbox = new OpCheckBox(ResolutionScaleEnabled, x, y) { description = "Enables the experimental resolution scale option. This is compatible with SBCameraScroll (but can be very laggy!!!), but doesn't work as well with Sharpener." };
+        resolutionScaleUpdown = new OpUpdown(ResolutionScale, new(x + c, y), w, 2) { description = "EXPERIMENTAL: Scales the resolution of the level texture to allow for finer details, but at a pretty big performance cost (especially with SBCameraScroll).\nYour recommended Resolution Scale ~= " + displayScaleString };
         optionsTab.AddItems(
             resolutionScaleCheckbox,
             resolutionScaleUpdown,

@@ -220,6 +220,9 @@ public partial class Plugin : BaseUnityPlugin
     //ALSO attempts to resolution scale...
     private void RoomCamera_ApplyPositionChange(On.RoomCamera.orig_ApplyPositionChange orig, RoomCamera self)
     {
+        if (self.levelTexCombiner.combinedLevelTex == null) //SBCameraScroll refuses to resize unless the texture already exists; a big shortcoming
+            self.levelTexCombiner.Initialize();
+
         orig(self);
 
         //Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", self.levelTexture);

@@ -6,11 +6,7 @@ using System.Security.Permissions;
 using UnityEngine;
 using BepInEx;
 using Unity.Mathematics;
-using UnityEngine.Profiling;
-using System.Runtime.CompilerServices;
-using Menu;
 using RWCustom;
-using Rewired;
 using Watcher;
 using UnityEngine.Rendering;
 using UnityEngine.Experimental.Rendering;
@@ -29,7 +25,7 @@ public partial class Plugin : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.ParallaxEffect",
         MOD_NAME = "Parallax Effect",
-        MOD_VERSION = "0.0.1";
+        MOD_VERSION = "0.0.2";
 
 
     public static ConfigOptions Options;
@@ -64,6 +60,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
             On.BackgroundScene.DrawPos -= BackgroundScene_DrawPos;
             On.BackgroundScene.Update -= BackgroundScene_Update;
+            On.Watcher.OuterRimView.DrawPos -= OuterRimView_DrawPos;
+            On.Watcher.OuterRimView.Update -= OuterRimView_Update;
             //On.BackgroundScene.BackgroundSceneElement.DrawSprites -= BackgroundSceneElement_DrawSprites;
             On.BackgroundScene.Simple2DBackgroundIllustration.DrawSprites -= Simple2DBackgroundIllustration_DrawSprites;
             On.AboveCloudsView.CloseCloud.DrawSprites -= CloseCloud_DrawSprites;
@@ -96,6 +94,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.BackgroundScene.DrawPos += BackgroundScene_DrawPos;
             On.BackgroundScene.Update += BackgroundScene_Update;
+            On.Watcher.OuterRimView.DrawPos += OuterRimView_DrawPos;
+            On.Watcher.OuterRimView.Update += OuterRimView_Update;
             //On.BackgroundScene.BackgroundSceneElement.DrawSprites += BackgroundSceneElement_DrawSprites;
             On.BackgroundScene.Simple2DBackgroundIllustration.DrawSprites += Simple2DBackgroundIllustration_DrawSprites;
             On.AboveCloudsView.CloseCloud.DrawSprites += CloseCloud_DrawSprites;
@@ -133,14 +133,7 @@ public partial class Plugin : BaseUnityPlugin
     //Sets/calculates the shader constants
     private void RoomCamera_ctor(On.RoomCamera.orig_ctor orig, RoomCamera self, RainWorldGame game, int cameraNumber)
     {
-        //WarpedLevelTextures.Clear(); //just in case
-
         //setup constants
-        //Shader.SetGlobalFloat("TheLazyCowboy1_WarpX", Options.Warp.Value / 1400f);
-        //Shader.SetGlobalFloat("TheLazyCowboy1_WarpY", Options.Warp.Value / 800f);
-        //Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpX", Options.Warp.Value * Options.MaxWarpFactor.Value / 1400f);
-        //Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.Warp.Value * Options.MaxWarpFactor.Value / 800f);
-        //Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarpY", Options.MaxWarp.Value / 800f);
         Shader.SetGlobalFloat("TheLazyCowboy1_Warp", Options.Warp.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarp", Options.MaxWarpFactor.Value);
 
@@ -152,8 +145,11 @@ public partial class Plugin : BaseUnityPlugin
 
         Shader.SetGlobalFloat("TheLazyCowboy1_StartOffset", startOffset);
         Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_MaxXDistance", Options.MaxXDistance.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 0.5f);
         Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 0.5f);
+
+        //keywords
 
         switch (Options.SmoothingType.Value)
         {
@@ -194,6 +190,11 @@ public partial class Plugin : BaseUnityPlugin
                 Shader.DisableKeyword("THELAZYCOWBOY1_INVDEPTHCURVE");
                 break;
         }
+
+        if (Options.DynamicOptimization.Value && !Shader.IsKeywordEnabled("THELAZYCOWBOY1_DYNAMICOPTIMIZATION"))
+            Shader.EnableKeyword("THELAZYCOWBOY1_DYNAMICOPTIMIZATION");
+        else if (!Options.DynamicOptimization.Value && Shader.IsKeywordEnabled("THELAZYCOWBOY1_DYNAMICOPTIMIZATION"))
+            Shader.DisableKeyword("THELAZYCOWBOY1_DYNAMICOPTIMIZATION");
 
         if (Options.NoCenterWarp.Value && !Shader.IsKeywordEnabled("THELAZYCOWBOY1_NOCENTERWARP"))
             Shader.EnableKeyword("THELAZYCOWBOY1_NOCENTERWARP");
@@ -259,60 +260,68 @@ public partial class Plugin : BaseUnityPlugin
     {
         orig(self);
 
+        Vector2 pos = new(0.5f, 0.5f);
+
+        if (!CamPos.ContainsKey(self.cameraNumber))
+            CamPos.Add(self.cameraNumber, new (0.5f, 0.5f));
+
+        //Follow creatures
         var crit = self.followAbstractCreature?.realizedCreature;
-        if (crit != null)
+        if (!Options.AlwaysCentered.Value && crit != null)
         {
             Vector2? critPos = (crit.inShortcut ? self.game.shortcuts.OnScreenPositionOfInShortCutCreature(self.room, crit) : crit.mainBodyChunk.pos);
             if (critPos != null)
             {
-                if (!CamPos.ContainsKey(self.cameraNumber))
-                    CamPos.Add(self.cameraNumber, new(0.5f, 0.5f));
-
                 //Vector2 localPos = (critPos.Value - self.CamPos(self.currentCameraPosition)
                 //Vector2 localPos = (critPos.Value - self.levelGraphic.GetPosition()
-                Vector2 localPos = (critPos.Value - self.pos
+                pos = (critPos.Value - self.pos
                     + (self.followCreatureInputForward + self.leanPos) * 2f)
                     / self.sSize;
-
-                try
-                {
-                    float mouseX = Input.GetAxis("Mouse X") * 0.25f;
-                    if (mouseX != 0f)
-                    {
-                        float strength = Mathf.Clamp01(Mathf.Abs(mouseX));
-                        //mouseX = 0.5f + 0.5f * Mathf.Clamp(mouseX, -1f, 1f);
-                        localPos.x += strength * ((mouseX > 0 ? 0.8f : -0.8f) - localPos.x);
-                    }
-
-                    float mouseY = Input.GetAxis("Mouse Y") * 0.25f * 0.5625f; //0.5625 = 9/16 
-                    if (mouseY != 0f)
-                    {
-                        float strength = Mathf.Clamp01(Mathf.Abs(mouseY));
-                        //mouseY = 0.5f + 0.5f * Mathf.Clamp(mouseY, -1f, 1f);
-                        localPos.y += strength * ((mouseY > 0 ? 0.8f : -0.8f) - localPos.y);
-                    }
-                }
-                catch { }
-
-                localPos.x = Mathf.Clamp01(localPos.x);
-                localPos.y = Mathf.Clamp01(localPos.y);
-
-                CamPos[self.cameraNumber] += Options.CameraMoveSpeed.Value * (new float2(localPos.x, localPos.y) - CamPos[self.cameraNumber]);
-                if (Options.InvertPos.Value)
-                {
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - CamPos[self.cameraNumber].x);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - CamPos[self.cameraNumber].y);
-                }
-                else
-                {
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", CamPos[self.cameraNumber].x);
-                    Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", CamPos[self.cameraNumber].y);
-                }
-
-
-                MidpointWarp.Remove(self.cameraNumber); //cam pos changed, so midpoint needs to be recalculated if it's there
             }
         }
+
+        //Mouse movement
+        if (Options.MouseSensitivity.Value > 0)
+        {
+            try
+            {
+                float mouseX = Input.GetAxis("Mouse X") * 0.25f;
+                if (mouseX != 0f)
+                {
+                    float strength = Mathf.Clamp01(Mathf.Abs(mouseX));
+                    //mouseX = 0.5f + 0.5f * Mathf.Clamp(mouseX, -1f, 1f);
+                    pos.x += Options.MouseSensitivity.Value * strength * ((mouseX > 0 ? 0.8f : -0.8f) - pos.x);
+                }
+
+                float mouseY = Input.GetAxis("Mouse Y") * 0.25f * 0.5625f; //0.5625 = 9/16 
+                if (mouseY != 0f)
+                {
+                    float strength = Mathf.Clamp01(Mathf.Abs(mouseY));
+                    //mouseY = 0.5f + 0.5f * Mathf.Clamp(mouseY, -1f, 1f);
+                    pos.y += Options.MouseSensitivity.Value * strength * ((mouseY > 0 ? 0.8f : -0.8f) - pos.y);
+                }
+            }
+            catch { }
+        }
+
+        pos.x = Mathf.Clamp01(pos.x);
+        pos.y = Mathf.Clamp01(pos.y);
+
+        //Actually change camera position
+        CamPos[self.cameraNumber] += Options.CameraMoveSpeed.Value * (new float2(pos.x, pos.y) - CamPos[self.cameraNumber]);
+        if (Options.InvertPos.Value)
+        {
+            Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - CamPos[self.cameraNumber].x);
+            Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - CamPos[self.cameraNumber].y);
+        }
+        else
+        {
+            Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", CamPos[self.cameraNumber].x);
+            Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", CamPos[self.cameraNumber].y);
+        }
+
+
+        MidpointWarp.Remove(self.cameraNumber); //cam pos changed, so midpoint needs to be recalculated if it's there
     }
     private Vector2 GetMidpointWarp(int cameraNumber)
     {
@@ -427,6 +436,34 @@ public partial class Plugin : BaseUnityPlugin
                     self.room.game.rainWorld.screenSize.y * (ModManager.DLCShared && self.room.waterInverted ? 1f : 2f) / 3f);
 
                 self.convergencePoint += Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);
+            }
+        }
+    }
+
+    //Same as above, but apparently Outer Rim overwrites its inherited function for no good reason
+    private Vector2 OuterRimView_DrawPos(On.Watcher.OuterRimView.orig_DrawPos orig, OuterRimView self, BackgroundScene.BackgroundSceneElement element, Vector2 camPos, RoomCamera camera)
+    {
+        if (Options.BackgroundWarp.Value > 0 && CamPos.ContainsKey(camera.cameraNumber))
+            camPos += Options.BackgroundWarp.Value * GetMidpointWarp(camera.cameraNumber);
+
+        return orig(self, element, camPos, camera);
+    }
+
+    //Warps the convergence point for Outer Rim
+    private void OuterRimView_Update(On.Watcher.OuterRimView.orig_Update orig, OuterRimView self, bool eu)
+    {
+        orig(self, eu);
+
+        if (Options.BackgroundRotation.Value > 0)
+        {
+            var cam = self.room.game.cameras.FirstOrDefault(c => c.room == self.room);
+            if (cam != null && CamPos.ContainsKey(cam.cameraNumber))
+            {
+                //reset convergence point in case I messed it up previously. Adapted from decompiled code
+                self.perspectiveCenter = new Vector2(self.room.game.rainWorld.screenSize.x,
+                    self.room.game.rainWorld.screenSize.y) * OuterRimView.ConvergenceMult;
+
+                self.perspectiveCenter += Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);
             }
         }
     }

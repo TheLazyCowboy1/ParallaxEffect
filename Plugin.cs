@@ -25,7 +25,7 @@ public partial class Plugin : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.ParallaxEffect",
         MOD_NAME = "Parallax Effect",
-        MOD_VERSION = "0.0.2";
+        MOD_VERSION = "0.0.3";
 
 
     public static ConfigOptions Options;
@@ -221,8 +221,11 @@ public partial class Plugin : BaseUnityPlugin
     //ALSO attempts to resolution scale...
     private void RoomCamera_ApplyPositionChange(On.RoomCamera.orig_ApplyPositionChange orig, RoomCamera self)
     {
+        Vector2 origSize = Vector2.zero; //say origSize was 0 if it didn't exist before
         if (self.levelTexCombiner.combinedLevelTex == null) //SBCameraScroll refuses to resize unless the texture already exists; a big shortcoming
             self.levelTexCombiner.Initialize();
+        else
+            origSize = new(self.levelTexCombiner.combinedLevelTex.width, self.levelTexCombiner.combinedLevelTex.height);
 
         orig(self);
 
@@ -231,7 +234,7 @@ public partial class Plugin : BaseUnityPlugin
         {
             //Resolution Scale in a SBCameraScroll-friendly way
             var t = self.levelTexCombiner;
-            if (Options.ResolutionScaleEnabled.Value)
+            if (Options.ResolutionScaleEnabled.Value && (t.combinedLevelTex.width != origSize.x || t.combinedLevelTex.height != origSize.y))
             {
                 if (!t.isActive)
                     t.Initialize();
@@ -241,6 +244,8 @@ public partial class Plugin : BaseUnityPlugin
                 t.intermediateTex.Release();
                 t.intermediateTex = new RenderTexture(Mathf.RoundToInt(t.intermediateTex.width * Options.ResolutionScale.Value), Mathf.RoundToInt(t.intermediateTex.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
                 t.intermediateTex.filterMode = 0;
+
+                Logger.LogDebug($"Upscaled level texture to {t.combinedLevelTex.width}x{t.combinedLevelTex.height}");
             }
 
             //t.AddPass(RenderTexture.GetTemporary(1400, 800), parallaxMaterial, parallaxShader.name, LevelTexCombiner.last);

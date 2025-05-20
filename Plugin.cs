@@ -25,7 +25,7 @@ public partial class Plugin : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.ParallaxEffect",
         MOD_NAME = "Parallax Effect",
-        MOD_VERSION = "0.0.3";
+        MOD_VERSION = "0.0.4";
 
 
     public static ConfigOptions Options;
@@ -290,20 +290,20 @@ public partial class Plugin : BaseUnityPlugin
         {
             try
             {
-                float mouseX = Input.GetAxis("Mouse X") * 0.25f;
+                float mouseX = Options.MouseSensitivity.Value * Input.GetAxis("Mouse X") * 0.25f;
                 if (mouseX != 0f)
                 {
                     float strength = Mathf.Clamp01(Mathf.Abs(mouseX));
                     //mouseX = 0.5f + 0.5f * Mathf.Clamp(mouseX, -1f, 1f);
-                    pos.x += Options.MouseSensitivity.Value * strength * ((mouseX > 0 ? 0.8f : -0.8f) - pos.x);
+                    pos.x += strength * ((mouseX > 0 ? 1f : 0f) - pos.x);
                 }
 
-                float mouseY = Input.GetAxis("Mouse Y") * 0.25f * 0.5625f; //0.5625 = 9/16 
+                float mouseY = Options.MouseSensitivity.Value * Input.GetAxis("Mouse Y") * 0.25f;// * 0.5625f; //0.5625 = 9/16 
                 if (mouseY != 0f)
                 {
                     float strength = Mathf.Clamp01(Mathf.Abs(mouseY));
                     //mouseY = 0.5f + 0.5f * Mathf.Clamp(mouseY, -1f, 1f);
-                    pos.y += Options.MouseSensitivity.Value * strength * ((mouseY > 0 ? 0.8f : -0.8f) - pos.y);
+                    pos.y += strength * ((mouseY > 0 ? 1f : 0f) - pos.y);
                 }
             }
             catch { }

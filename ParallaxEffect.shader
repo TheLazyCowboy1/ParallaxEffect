@@ -43,6 +43,7 @@ CGPROGRAM
 			#pragma multi_compile _ THELAZYCOWBOY1_NOCENTERWARP
 			#pragma multi_compile _ THELAZYCOWBOY1_CLOSESTPIXELONLY
 			#pragma multi_compile _ THELAZYCOWBOY1_DYNAMICOPTIMIZATION
+			#pragma multi_compile _ THELAZYCOWBOY1_WARPMAINTEX
 
 // #pragma enable_d3d11_debug_symbols
 #include "UnityCG.cginc"
@@ -94,6 +95,8 @@ uniform float TheLazyCowboy1_StepSize;
 uniform float TheLazyCowboy1_StartOffset;
 uniform float TheLazyCowboy1_RedModScale;
 uniform float TheLazyCowboy1_MaxXDistance;
+uniform float TheLazyCowboy1_BackgroundScale;
+uniform float TheLazyCowboy1_AntiAliasingFac;
 
 inline float depthCurve(float d) {
 #if THELAZYCOWBOY1_DEPTHCURVE && THELAZYCOWBOY1_INVDEPTHCURVE //why not thrown in a 4th, median option??
@@ -142,12 +145,20 @@ half4 frag (v2f i) : SV_Target
 		discard;
 	}
 
+//#if THELAZYCOWBOY1_NOCENTERWARP
+	//float posCamXDiff = sinSmoothCurve((scrPos.x - TheLazyCowboy1_CamPosX) * 2 * abs(TheLazyCowboy1_CamPosX - 0.5f));
+	//float posCamYDiff = sinSmoothCurve((scrPos.y - TheLazyCowboy1_CamPosY) * 2 * abs(TheLazyCowboy1_CamPosY - 0.5f));
+//#else
+	float absBackScale = abs(TheLazyCowboy1_BackgroundScale); //prevents ridiculous results when BackgroundScale is < 0, especially: -1 caused division by 0
+	float camDiffMod = 1 / (absBackScale + 0.5f * (1 - absBackScale));
+	float posCamXDiff = sinSmoothCurve(camDiffMod * (scrPos.x*TheLazyCowboy1_BackgroundScale + 0.5f*(1-TheLazyCowboy1_BackgroundScale) - TheLazyCowboy1_CamPosX));
+	float posCamYDiff = sinSmoothCurve(camDiffMod * (scrPos.y*TheLazyCowboy1_BackgroundScale + 0.5f*(1-TheLazyCowboy1_BackgroundScale) - TheLazyCowboy1_CamPosY));
+//#endif
 #if THELAZYCOWBOY1_NOCENTERWARP
-	float posCamXDiff = sinSmoothCurve(scrPos.x - TheLazyCowboy1_CamPosX) * 2 * abs(TheLazyCowboy1_CamPosX - 0.5f);
-	float posCamYDiff = sinSmoothCurve(scrPos.y - TheLazyCowboy1_CamPosY) * 2 * abs(TheLazyCowboy1_CamPosY - 0.5f);
-#else
-	float posCamXDiff = sinSmoothCurve(scrPos.x - TheLazyCowboy1_CamPosX);
-	float posCamYDiff = sinSmoothCurve(scrPos.y - TheLazyCowboy1_CamPosY);
+	float camXDiff2 = 4*(TheLazyCowboy1_CamPosX - 0.5f)*(TheLazyCowboy1_CamPosX - 0.5f);
+	posCamXDiff = posCamXDiff * camXDiff2 * (2 - camXDiff2); //posCamXDiff *= 2c^2 - c^4; c = 2 * (camPos - 0.5)
+	float camYDiff2 = 4*(TheLazyCowboy1_CamPosY - 0.5f)*(TheLazyCowboy1_CamPosY - 0.5f);
+	posCamYDiff = posCamYDiff * camYDiff2 * (2 - camYDiff2);
 #endif
 
 	//float2 moveStep = TheLazyCowboy1_Warp * TheLazyCowboy1_StepSize * _LevelTex_TexelSize * float2(
@@ -156,13 +167,12 @@ half4 frag (v2f i) : SV_Target
 		clamp(posCamYDiff, -TheLazyCowboy1_MaxWarp, TheLazyCowboy1_MaxWarp)
 		);
 
-
 	//OPTIMIZATION
 
 #if THELAZYCOWBOY1_DYNAMICOPTIMIZATION
 	//float maxWarpFac = max(max(abs(moveStep.x), abs(moveStep.y)) / TheLazyCowboy1_MaxWarp, 4.0f / TheLazyCowboy1_TestNum);
 	float invWarpFac = min(
-		TheLazyCowboy1_MaxWarp / max(abs(moveStep.x), abs(moveStep.y)) * 0.8f, //0.8 == arbitrary constant: optimizes slightly less than full potential
+		TheLazyCowboy1_MaxWarp / max(abs(moveStep.x), abs(moveStep.y)) * 0.95f, //0.95 == arbitrary constant: optimizes slightly less than full potential
 		0.25f * TheLazyCowboy1_TestNum); //can't be less than 4 totalTests
 #endif
 		//scale moveStep back up to its proper size
@@ -187,13 +197,17 @@ half4 frag (v2f i) : SV_Target
 	float invStepSize = 1 / stepSize;
 #endif
 
+#if THELAZYCOWBOY1_WARPMAINTEX
+	float2 bestGrabPos = i.uv;
+#else
 	fixed4 bestCol = tex2D(_LevelTex, i.uv);
 	float redColorMod = 0;
+#endif
 
 	uint counter = 0;
 	float noiseVal = tex2D(_NoiseTex2, i.uv).x;
 	float percentage = TheLazyCowboy1_StartOffset
-		+ 0.25f * stepSize * max(noiseVal - 0.2f, 0) //a SIGNIFICANT shift (up to 1/5th step) in order to break up straight lines...
+		+ TheLazyCowboy1_AntiAliasingFac * stepSize * clamp(noiseVal - 0.3f, 0, 0.4f) //a SIGNIFICANT shift (up to 2/5th step) in order to break up straight lines...
 		+ 0.0009765625f; //add a very tiny margin of error: 1/1024
 
 	[loop]
@@ -207,8 +221,13 @@ half4 frag (v2f i) : SV_Target
 #else
 		if (xDistance >= 0) {
 #endif
+
+#if THELAZYCOWBOY1_WARPMAINTEX
+			bestGrabPos = grabPos;
+#else
 			bestCol = newCol;
 			redColorMod = xDistance;
+#endif
 			notFound = 0; //we found it; no reason to search further!
 		}
 
@@ -217,9 +236,13 @@ half4 frag (v2f i) : SV_Target
 			xDistance = abs(xDistance);
 			float score = (floor(xDistance * invStepSize) + newDepth * 2) * stepSize; //newDepth is only a deciding factor if the distances are within 2 steps
 			if (score < bestScore) {
+#if THELAZYCOWBOY1_WARPMAINTEX
+				bestGrabPos = grabPos;
+#else
 				bestCol = newCol;
-				bestScore = score;
 				redColorMod = xDistance;
+#endif
+				bestScore = score;
 			}
 		}
 #endif
@@ -229,6 +252,10 @@ half4 frag (v2f i) : SV_Target
 		counter = counter + 1;
 	}
 
+#if THELAZYCOWBOY1_WARPMAINTEX
+	return tex2D(_MainTex, bestGrabPos);
+#else
+
 	//apply redColorMod
 
 	if (redColorMod >= stepSize) {
@@ -236,7 +263,7 @@ half4 frag (v2f i) : SV_Target
 				//add noise to roughen it up a bit
 #if THELAZYCOWBOY1_CLOSESTPIXELONLY
 		if (notFound) { //found using closest pixel
-			redColorMod = redColorMod * max(noiseVal - 0.3f, 0);
+			redColorMod = redColorMod * max(noiseVal - 0.4f, 0);
 		} else {
 			redColorMod = redColorMod + min(redColorMod, 0.4f) * (noiseVal - 0.5f) * 0.5f; //up to ~5 pixel variation: 0.4 * 0.5 = 0.2; 0.2 * 25px = 5px
 		}
@@ -250,6 +277,7 @@ half4 frag (v2f i) : SV_Target
 	}
 
 	return bestCol;
+#endif
 }
 ENDCG
 				

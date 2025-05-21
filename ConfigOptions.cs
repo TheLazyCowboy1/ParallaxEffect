@@ -15,21 +15,24 @@ public class ConfigOptions : OptionInterface
     public ConfigOptions()
     {
         //AllSlugcats = this.config.Bind<bool>("AllSlugcats", false);
-        Warp = this.config.Bind<float>("Warp", 25, new ConfigAcceptableRange<float>(2, 200));
+        Warp = this.config.Bind<float>("Warp", 25, new ConfigAcceptableRange<float>(-500, 500));
         //MaxWarp = this.config.Bind<float>("MaxWarp", 20f, new ConfigAcceptableRange<float>(0, 100f));
         MaxWarpFactor = this.config.Bind<float>("MaxWarpFactor", 0.9f, new ConfigAcceptableRange<float>(0.1f, 1));
         Optimization = this.config.Bind<float>("Optimization", 1, new ConfigAcceptableRange<float>(0.2f, 10));
         DynamicOptimization = this.config.Bind<bool>("DynamicOptimization", true);
         StartOffset = this.config.Bind<float>("StartOffset", -0.1f, new ConfigAcceptableRange<float>(-1, 0));
         //EndOffset = this.config.Bind<float>("EndOffset", 1f, new ConfigAcceptableRange<float>(0.1f, 2f));
-        RedModScale = this.config.Bind<float>("RedModScale", 0.85f, new ConfigAcceptableRange<float>(0f, 10));
+        RedModScale = this.config.Bind<float>("RedModScale", 0.85f, new ConfigAcceptableRange<float>(0, 10));
+        BackgroundScale = this.config.Bind<float>("BackgroundScale", 1, new ConfigAcceptableRange<float>(-10, 10));
+        AntiAliasing = this.config.Bind<float>("AntiAliasing", 0.2f, new ConfigAcceptableRange<float>(0, 1));
         ClosestPixelOnly = this.config.Bind<bool>("ClosestPixelOnly", false);
-        MaxXDistance = this.config.Bind<float>("MaxXDistance", 0.2f, new ConfigAcceptableRange<float>(0f, 2));
+        MaxXDistance = this.config.Bind<float>("MaxXDistance", 0.2f, new ConfigAcceptableRange<float>(0, 2));
         InvertPos = this.config.Bind<bool>("InvertPos", false);
         NoCenterWarp = this.config.Bind<bool>("NoCenterWarp", false);
         AlwaysCentered = this.config.Bind<bool>("AlwaysCentered", false);
         CameraMoveSpeed = this.config.Bind<float>("CameraMoveSpeed", 0.1f, new ConfigAcceptableRange<float>(0, 1));
         WarpDecals = this.config.Bind<bool>("WarpDecals", true);
+        WarpSnow = this.config.Bind<bool>("WarpSnow", true);
         BackgroundWarp = this.config.Bind<float>("BackgroundWarp", 1, new ConfigAcceptableRange<float>(0, 5));
         BackgroundRotation = this.config.Bind<float>("BackgroundRotation", 0.5f, new ConfigAcceptableRange<float>(0, 5));
         MouseSensitivity = this.config.Bind<float>("MouseSensitivity", 1f, new ConfigAcceptableRange<float>(0, 10));
@@ -49,13 +52,16 @@ public class ConfigOptions : OptionInterface
     public readonly Configurable<float> StartOffset;
     public readonly Configurable<float> EndOffset = new(1.0f); //temporarily disabled, because it isn't useful
     public readonly Configurable<float> RedModScale;
+    public readonly Configurable<float> BackgroundScale;
+    public readonly Configurable<float> AntiAliasing;
     public readonly Configurable<bool> ClosestPixelOnly;
     public readonly Configurable<float> MaxXDistance;
     public readonly Configurable<bool> InvertPos;
     public readonly Configurable<bool> NoCenterWarp;
     public readonly Configurable<bool> AlwaysCentered;
     public readonly Configurable<float> CameraMoveSpeed;
-    public readonly Configurable<bool> WarpDecals; //what about making this a config? we probably don't have to re-warp EVERY frame
+    public readonly Configurable<bool> WarpDecals;
+    public readonly Configurable<bool> WarpSnow;
     public readonly Configurable<float> BackgroundWarp;
     public readonly Configurable<float> BackgroundRotation;
     public readonly Configurable<float> MouseSensitivity;
@@ -114,18 +120,26 @@ public class ConfigOptions : OptionInterface
             new OpUpdown(StartOffset, new(x, y), w, 2) { description = "The lowest amount by which pixels can be warped. If set < 0, allows objects to \"project into the screen,\" which looks like more realistic rotation but might be annoying.\nI recommend setting it >= -0.20. Below -0.20 only has an effect for EXTREME or PARABOLIC depth curves. 0.00 disables \"projecting into the screen.\"" },
                 //new OpLabel(t2, y, "[ADVANCED] Maximum Tested Warp"),
                 //new OpUpdown(EndOffset, new(x2, y), w, 2) { description = "ADVANCED: Keep this at 1.00. In theory, raising it above 1.00 only increases lag, and lowering it from 1.00 creates visual artifacts.\nMight be useful to increase to ~1.05 if Don't Extend Objects is checked?" },
-            new OpLabel(t, y += h, "Projection Steepness/Fade"),
-            new OpUpdown(RedModScale, new(x, y), w, 2) { description = "Scales how quickly warped things \"fade into the background.\" It is recommended to set < 1 for PARABOLIC and EXTREME depth curves.\nLow values = objects appear thick; High values = objects aren't \"projected backwards\" as noticably (they fade faster)." },
+                new OpLabel(t2, y, "Projection Steepness/Fade"),
+                new OpUpdown(RedModScale, new(x2, y), w, 2) { description = "Scales how quickly warped things \"fade into the background.\" It is recommended to set < 1 for PARABOLIC and EXTREME depth curves.\nLow values = objects appear thick; High values = objects aren't \"projected backwards\" as noticably (they fade faster)." },
+            new OpLabel(t, y += h, "Convergence Scale"),
+            new OpUpdown(BackgroundScale, new(x, y), w, 2) { description = "How much to converge (shrink) the back of the room towards the camera location. Basically, higher values = back wall looks farther away.\n0.00 = Keeps vanilla proportions (and doesn't warp near the center) (but can look jittery due to aliasing). 1.00 = Makes things look deeper (and doesn't warp near the player)." },
+                new OpLabel(t2, y, "Anti-Aliasing"),
+                new OpUpdown(AntiAliasing, new(x2, y), w, 2) { description = "Attempts some form of anti-aliasing by randomly offsetting some pixels to make moving edges less straight.\nRecommended to keep BELOW 0.50, unless Convergence Scale is near 0.00." },
             //new OpLabel(t, y += h, "[EXPERIMENTAL] Don't Extend Objects"),
             //new OpCheckBox(ClosestPixelOnly, x + c, y) { description = "EXPERIMENTAL: Disables the assumption that all objects extend indefinitely far back. Instead, the shader will find the \"closest pixel\" if an exact color cannot be found.\nThis inevitably has some obvious visual artifacts, and is MUCH more performance-intensive." },
             new OpLabel(t, y += h, "Invert Pos"),
             new OpCheckBox(InvertPos, x + c, y) { description = "Makes the warp stronger closer to the player, and weaker further away.\nThis is more visually realistic, but not ideal for gameplay." },
-                new OpLabel(t2, y, "Don't Warp when Centered"),
-                new OpCheckBox(NoCenterWarp, x2 + c, y) { description = "Makes the warp factor scale according to how far away the player is from the center of the screen.\nThis means that the room will look totally normal when the player is in the center of the room." },
+                //new OpLabel(t2, y, "Don't Warp when Centered"),
+                //new OpCheckBox(NoCenterWarp, x2 + c, y) { description = "Makes the warp factor scale according to how far away the player is from the center of the screen.\nThis means that the room will look totally normal when the player is in the center of the room." },
+                new OpLabel(t2, y, "Minimize Warp when Centered"),
+                new OpCheckBox(NoCenterWarp, x2 + c, y) { description = "NOT RECOMMENDED: SET BACKGROUND SCALE TO 0.00 INSTEAD. Makes the warp factor scale according to how far away the player is from the center of the screen.\nThis means that the room will look mostly unwarped when the player is in the center of the room. However, it can look quite unnatural due to the non-linear camera movement." },
             new OpLabel(t, y += h, "Don't Follow Player"),
             new OpCheckBox(AlwaysCentered, x + c, y) { description = "Always assumes the player is exactly in the center of the screen.\nRecommended for SBCameraScroll; otherwise this is pretty pointless. Might help motion-sensitive folks?" },
             new OpLabel(t, y += h, "Warp Decals"),
             new OpCheckBox(WarpDecals, x + c, y) { description = "Also warps decals added through dev tools. These are common occurrences.\nNOTE: Runs on the CPU, not on the GPU!! If there are a lot of decals, this will increase lag." },
+                new OpLabel(t2, y, "Warp Snow"),
+                new OpCheckBox(WarpSnow, x2 + c, y) { description = "Warps snow, but comes with a SEVERE performance cost in snowy rooms.\nHighly recommended unless your GPU can't handle it or Warp Factor is set very low." },
             new OpLabel(t, y += h, "Background Offset"),
             new OpUpdown(BackgroundWarp, new(x, y), w, 2) { description = "How much to offset the background graphic, in order to make it more consistent with the parallax effect. Expressed as a fraction of the Warp Factor.\nSet to 0.00 to disable. 1.00 == same as deepest room object." },
                 new OpLabel(t2, y, "Background Rotation"),

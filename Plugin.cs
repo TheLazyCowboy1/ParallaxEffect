@@ -25,7 +25,7 @@ public partial class Plugin : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.ParallaxEffect",
         MOD_NAME = "Parallax Effect",
-        MOD_VERSION = "0.0.4";
+        MOD_VERSION = "0.0.5";
 
 
     public static ConfigOptions Options;
@@ -56,6 +56,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
             On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
 
+            On.RoomCamera.UpdateSnowLight -= RoomCamera_UpdateSnowLight;
+
             On.CustomDecal.DrawSprites -= CustomDecal_DrawSprites;
             On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
             On.BackgroundScene.DrawPos -= BackgroundScene_DrawPos;
@@ -75,8 +77,10 @@ public partial class Plugin : BaseUnityPlugin
     }
 
     //public FShader parallaxFShader;
-    public Shader parallaxShader;
-    public Material parallaxMaterial;
+    public Shader ParallaxShader;
+    public Material ParallaxMaterial;
+
+    public int ShadCamPosX = -1, ShadCamPosY = -1;
 
     private bool IsInit;
     private void RainWorldOnOnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
@@ -89,6 +93,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.ctor += RoomCamera_ctor;
             On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
             On.RoomCamera.GetCameraBestIndex += RoomCamera_GetCameraBestIndex;
+
+            On.RoomCamera.UpdateSnowLight += RoomCamera_UpdateSnowLight;
 
             On.CustomDecal.DrawSprites += CustomDecal_DrawSprites;
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
@@ -109,10 +115,13 @@ public partial class Plugin : BaseUnityPlugin
             {
                 AssetBundle assetBundle = AssetBundle.LoadFromFile(AssetManager.ResolveFilePath("AssetBundles\\LazyCowboy\\ParallaxEffect.assets"));
 
-                parallaxShader = assetBundle.LoadAsset<Shader>("ParallaxEffect.shader");
-                if (parallaxShader == null)
+                ParallaxShader = assetBundle.LoadAsset<Shader>("ParallaxEffect.shader");
+                if (ParallaxShader == null)
                     Logger.LogError("Could not find shader ParallaxEffect.shader");
-                parallaxMaterial = new(parallaxShader);
+                ParallaxMaterial = new(ParallaxShader);
+
+                ShadCamPosX = Shader.PropertyToID("TheLazyCowboy1_CamPosX");
+                ShadCamPosY = Shader.PropertyToID("TheLazyCowboy1_CamPosY");
             }
             catch (Exception ex) { Logger.LogError(ex); }
             
@@ -130,24 +139,32 @@ public partial class Plugin : BaseUnityPlugin
     #endregion
 
     #region CameraHooks
+
+    public RenderTexture OrigSnowTexture;
+
     //Sets/calculates the shader constants
     private void RoomCamera_ctor(On.RoomCamera.orig_ctor orig, RoomCamera self, RainWorldGame game, int cameraNumber)
     {
+        OrigSnowTexture?.Release();
+        OrigSnowTexture = new(1400, 800, 0, DefaultFormat.LDR);
+
         //setup constants
         Shader.SetGlobalFloat("TheLazyCowboy1_Warp", Options.Warp.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarp", Options.MaxWarpFactor.Value);
 
         float startOffset = Mathf.Max(Options.StartOffset.Value, depthCurve(-0.2f)); //prevent unnecessary processing
-        int testNum = (int)Mathf.Ceil(Options.Warp.Value * Options.MaxWarpFactor.Value * (Options.EndOffset.Value - startOffset) / Options.Optimization.Value);
+        int testNum = Mathf.Max(2, (int)Mathf.Ceil(Mathf.Abs(Options.Warp.Value) * Options.MaxWarpFactor.Value * (Options.EndOffset.Value - startOffset) / Options.Optimization.Value));
         Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum);
         Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (Options.EndOffset.Value - startOffset) / testNum);
         //Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", Options.Optimization.Value);
 
         Shader.SetGlobalFloat("TheLazyCowboy1_StartOffset", startOffset);
         Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundScale", Options.BackgroundScale.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_AntiAliasingFac", Options.AntiAliasing.Value * 2.5f);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxXDistance", Options.MaxXDistance.Value);
-        Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 0.5f);
-        Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 0.5f);
+        Shader.SetGlobalFloat(ShadCamPosX, 0.5f);
+        Shader.SetGlobalFloat(ShadCamPosY, 0.5f);
 
         //keywords
 
@@ -249,7 +266,7 @@ public partial class Plugin : BaseUnityPlugin
             }
 
             //t.AddPass(RenderTexture.GetTemporary(1400, 800), parallaxMaterial, parallaxShader.name, LevelTexCombiner.last);
-            t.AddPass(parallaxShader, parallaxShader.name, LevelTexCombiner.last);
+            t.AddPass(ParallaxShader, ParallaxShader.name, LevelTexCombiner.last);
             //Logger.LogDebug($"Added {parallaxShader.name} shader pass!"); //happens every screen change; annoying log spam
         }
         catch (Exception ex) { Logger.LogError(ex); }
@@ -316,13 +333,13 @@ public partial class Plugin : BaseUnityPlugin
         CamPos[self.cameraNumber] += Options.CameraMoveSpeed.Value * (new float2(pos.x, pos.y) - CamPos[self.cameraNumber]);
         if (Options.InvertPos.Value)
         {
-            Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", 1f - CamPos[self.cameraNumber].x);
-            Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", 1f - CamPos[self.cameraNumber].y);
+            Shader.SetGlobalFloat(ShadCamPosX, 1f - CamPos[self.cameraNumber].x);
+            Shader.SetGlobalFloat(ShadCamPosY, 1f - CamPos[self.cameraNumber].y);
         }
         else
         {
-            Shader.SetGlobalFloat("TheLazyCowboy1_CamPosX", CamPos[self.cameraNumber].x);
-            Shader.SetGlobalFloat("TheLazyCowboy1_CamPosY", CamPos[self.cameraNumber].y);
+            Shader.SetGlobalFloat(ShadCamPosX, CamPos[self.cameraNumber].x);
+            Shader.SetGlobalFloat(ShadCamPosY, CamPos[self.cameraNumber].y);
         }
 
 
@@ -336,6 +353,7 @@ public partial class Plugin : BaseUnityPlugin
 
 
     //Resolution Scaling
+    [Obsolete]
     private void LevelTexCombiner_CreateBuffer(On.Watcher.LevelTexCombiner.orig_CreateBuffer orig, LevelTexCombiner self, string id, RenderTargetIdentifier texture, Material material, CameraEvent evt)
     {
         try
@@ -356,6 +374,27 @@ public partial class Plugin : BaseUnityPlugin
         catch (Exception ex) { Logger.LogError(ex); }
     }
 
+
+    //Forces the snow to use the combined level texture
+    private void RoomCamera_UpdateSnowLight(On.RoomCamera.orig_UpdateSnowLight orig, RoomCamera self)
+    {
+        /*if (self.levelTexCombiner.isActive)
+        {
+            Shader.DisableKeyword("COMBINEDLEVEL");
+            orig(self);
+            Shader.EnableKeyword("COMBINEDLEVEL");
+        }
+        else orig(self);*/
+        orig(self);
+
+        //Save the new snow texture, so I don't accidentally overwrite it...
+        //OrigSnowTexture?.Release();
+        //OrigSnowTexture = new(self.SnowTexture);
+        //OrigSnowTexture.Create();
+        //Logger.LogDebug($"OrigSnowTexture: {OrigSnowTexture.width}x{OrigSnowTexture.height}");
+        if (Options.WarpSnow.Value)
+            Graphics.Blit(self.SnowTexture, OrigSnowTexture);
+    }
 
     #endregion
 
@@ -389,8 +428,11 @@ public partial class Plugin : BaseUnityPlugin
     }
 
     //Attempts to warp background image, which I'm not sure is ever even used...
+    //ALSO warps snow texture
     private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
     {
+        //self.snowChange = true;
+
         orig(self, timeStacker, timeSpeed);
 
         //warp background
@@ -401,6 +443,14 @@ public partial class Plugin : BaseUnityPlugin
 
             self.backgroundGraphic.x = self.backgroundGraphic.x - warp.x;
             self.backgroundGraphic.y = self.backgroundGraphic.y - warp.y;
+        }
+
+        //warp snow
+        if (Options.WarpSnow.Value && Shader.IsKeywordEnabled("SNOW_ON"))
+        {
+            Shader.EnableKeyword("THELAZYCOWBOY1_WARPMAINTEX");
+            Graphics.Blit(OrigSnowTexture, self.SnowTexture, ParallaxMaterial);
+            Shader.DisableKeyword("THELAZYCOWBOY1_WARPMAINTEX");
         }
     }
 
@@ -581,11 +631,17 @@ public partial class Plugin : BaseUnityPlugin
 
     public Vector2 CalculateWarp(Vector2 objPos, float2 playerPos)
     {
-        Vector2 warp = new Vector2(sinSmoothCurve(objPos.x - playerPos.x), sinSmoothCurve(objPos.y - playerPos.y));
+        float absBackScale = Mathf.Abs(Options.BackgroundScale.Value);
+        float camDiffMod = 1 / (absBackScale + 0.5f * (1 - absBackScale));
+        Vector2 warp = new Vector2(
+            sinSmoothCurve(camDiffMod * (objPos.x*Options.BackgroundScale.Value + 0.5f*(1-Options.BackgroundScale.Value) - playerPos.x)),
+            sinSmoothCurve(camDiffMod * (objPos.y*Options.BackgroundScale.Value + 0.5f*(1-Options.BackgroundScale.Value) - playerPos.y)));
         if (Options.NoCenterWarp.Value)
         {
-            warp.x *= 2f * Mathf.Abs(playerPos.x - 0.5f);
-            warp.y *= 2f * Mathf.Abs(playerPos.y - 0.5f);
+            float camXDiff2 = 4 * (playerPos.x - 0.5f) * (playerPos.x - 0.5f);
+            warp.x *= camXDiff2 * (2 - camXDiff2); //posCamXDiff *= 1.5c^2 - 0.5c^4; c = 2 * (camPos - 0.5)
+            float camYDiff2 = 4 * (playerPos.y - 0.5f) * (playerPos.y - 0.5f);
+            warp.y *= camYDiff2 * (2 - camYDiff2);
         }
         return Options.Warp.Value * new Vector2(
             Mathf.Clamp(warp.x, -Options.MaxWarpFactor.Value, Options.MaxWarpFactor.Value),

@@ -10,6 +10,10 @@ using RWCustom;
 using Watcher;
 using UnityEngine.Rendering;
 using UnityEngine.Experimental.Rendering;
+using Graphics = UnityEngine.Graphics;
+using MonoMod.Cil;
+using Mono.Cecil.Cil;
+using BepInEx.Logging;
 
 #pragma warning disable CS0618
 
@@ -29,12 +33,14 @@ public partial class Plugin : BaseUnityPlugin
 
 
     public static ConfigOptions Options;
+    public static ManualLogSource PublicLogger;
 
     #region Setup
     public Plugin()
     {
         try
         {
+            PublicLogger = Logger;
             Options = new ConfigOptions();
         }
         catch (Exception ex)
@@ -54,12 +60,17 @@ public partial class Plugin : BaseUnityPlugin
         {
             On.RoomCamera.ctor -= RoomCamera_ctor;
             On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
-            On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
+            //On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
+            On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
+            On.RoomCamera.Update -= RoomCamera_Update;
 
             On.RoomCamera.UpdateSnowLight -= RoomCamera_UpdateSnowLight;
+            On.RoomCamera.PreLoadTexture -= RoomCamera_PreLoadTexture;
+            On.RoomCamera.MoveCamera2 -= RoomCamera_MoveCamera2;
+            //On.WorldLoader.CreatingAbstractRoomsThread -= WorldLoader_CreatingAbstractRoomsThread;
+            On.WorldLoader.CreatingWorld -= WorldLoader_CreatingWorld;
 
             On.CustomDecal.DrawSprites -= CustomDecal_DrawSprites;
-            On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
             On.BackgroundScene.DrawPos -= BackgroundScene_DrawPos;
             On.BackgroundScene.Update -= BackgroundScene_Update;
             On.Watcher.OuterRimView.DrawPos -= OuterRimView_DrawPos;
@@ -69,6 +80,7 @@ public partial class Plugin : BaseUnityPlugin
             On.AboveCloudsView.CloseCloud.DrawSprites -= CloseCloud_DrawSprites;
             On.AboveCloudsView.DistantCloud.DrawSprites -= DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites -= FlyingCloud_DrawSprites;
+            IL.TerrainCurve.DrawSprites -= TerrainCurve_DrawSprites;
 
             //On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
 
@@ -79,6 +91,14 @@ public partial class Plugin : BaseUnityPlugin
     //public FShader parallaxFShader;
     public Shader ParallaxShader;
     public Material ParallaxMaterial;
+
+    //public Shader ParallaxAdvancedShader;
+    //public Material ParallaxAdvancedMaterial;
+
+    public Shader BackgroundBuilderShader;
+    public Material Layer2BuilderMaterial, Layer3BuilderMaterial;
+
+    public static string ModFolderPath = "";
 
     public int ShadCamPosX = -1, ShadCamPosY = -1;
 
@@ -92,12 +112,17 @@ public partial class Plugin : BaseUnityPlugin
 
             On.RoomCamera.ctor += RoomCamera_ctor;
             On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
-            On.RoomCamera.GetCameraBestIndex += RoomCamera_GetCameraBestIndex;
+            //On.RoomCamera.GetCameraBestIndex += RoomCamera_GetCameraBestIndex;
+            On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
+            On.RoomCamera.Update += RoomCamera_Update;
 
             On.RoomCamera.UpdateSnowLight += RoomCamera_UpdateSnowLight;
+            On.RoomCamera.PreLoadTexture += RoomCamera_PreLoadTexture;
+            On.RoomCamera.MoveCamera2 += RoomCamera_MoveCamera2;
+            //On.WorldLoader.CreatingAbstractRoomsThread += WorldLoader_CreatingAbstractRoomsThread;
+            On.WorldLoader.CreatingWorld += WorldLoader_CreatingWorld;
 
             On.CustomDecal.DrawSprites += CustomDecal_DrawSprites;
-            On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.BackgroundScene.DrawPos += BackgroundScene_DrawPos;
             On.BackgroundScene.Update += BackgroundScene_Update;
             On.Watcher.OuterRimView.DrawPos += OuterRimView_DrawPos;
@@ -107,6 +132,7 @@ public partial class Plugin : BaseUnityPlugin
             On.AboveCloudsView.CloseCloud.DrawSprites += CloseCloud_DrawSprites;
             On.AboveCloudsView.DistantCloud.DrawSprites += DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites += FlyingCloud_DrawSprites;
+            IL.TerrainCurve.DrawSprites += TerrainCurve_DrawSprites;
 
             //On.Watcher.LevelTexCombiner.CreateBuffer += LevelTexCombiner_CreateBuffer;
 
@@ -120,10 +146,24 @@ public partial class Plugin : BaseUnityPlugin
                     Logger.LogError("Could not find shader ParallaxEffect.shader");
                 ParallaxMaterial = new(ParallaxShader);
 
+                //ParallaxAdvancedShader = assetBundle.LoadAsset<Shader>("ParallaxAdvanced.shader");
+                //if (ParallaxAdvancedShader == null)
+                    //Logger.LogError("Could not find shader ParallaxAdvanced.shader");
+                //ParallaxAdvancedMaterial = new(ParallaxAdvancedShader);
+
+                BackgroundBuilderShader = assetBundle.LoadAsset<Shader>("ParallaxBackgroundBuilder.shader");
+                if (BackgroundBuilderShader == null)
+                    Logger.LogError("Could not find shader ParallaxBackgroundBuilder.shader");
+                Layer2BuilderMaterial = new(BackgroundBuilderShader) { name = "TheLazyCowboy1_BackgroundBuilder_l2" };
+                Layer3BuilderMaterial = new(BackgroundBuilderShader) { name = "TheLazyCowboy1_BackgroundBuilder_l3" };
+                Layer3BuilderMaterial.EnableKeyword("THELAZYCOWBOY1_INCLUDELAYER2");
+
                 ShadCamPosX = Shader.PropertyToID("TheLazyCowboy1_CamPosX");
                 ShadCamPosY = Shader.PropertyToID("TheLazyCowboy1_CamPosY");
             }
             catch (Exception ex) { Logger.LogError(ex); }
+
+            ModFolderPath = ModManager.ActiveMods.Find(mod => mod.id == MOD_ID).path;
             
             MachineConnector.SetRegisteredOI(MOD_ID, Options);
             IsInit = true;
@@ -140,19 +180,42 @@ public partial class Plugin : BaseUnityPlugin
 
     #region CameraHooks
 
+    public int CachedTextureCount = 1;
+    public RenderTexture[] Layer2TexArray = new RenderTexture[1];
+    public RenderTexture[] Layer3TexArray = new RenderTexture[1];
+    public string[] LayerRooms = new string[1];
+    public int CurLayerIdx = 0;
+    public RenderTexture Layer2Tex { get => Layer2TexArray[CurLayerIdx]; set => Layer2TexArray[CurLayerIdx] = value; }
+    public RenderTexture Layer3Tex { get => Layer3TexArray[CurLayerIdx]; set => Layer3TexArray[CurLayerIdx] = value; }
+    public string CurRoom { get => LayerRooms[CurLayerIdx]; set => LayerRooms[CurLayerIdx] = value; }
+    public void IncrementLayerIdx()
+    {
+        CurLayerIdx = (CurLayerIdx > 0) ? CurLayerIdx - 1 : CachedTextureCount - 1;
+    }
+    public void SwitchToLayerIdx(int newIdx)
+    {
+        CurLayerIdx = newIdx;
+    }
+
     public RenderTexture OrigSnowTexture;
+
+    //public CommandBuffer BackgroundBuilderBuffer;
+    public bool CanRenderBackground = true;
+    //public string LastGeneratedRoom = "";
+    public List<string> GeneratedBackgrounds = new();
+
+    public byte[] PreLoadedLayer2, PreLoadedLayer3;
+
 
     //Sets/calculates the shader constants
     private void RoomCamera_ctor(On.RoomCamera.orig_ctor orig, RoomCamera self, RainWorldGame game, int cameraNumber)
     {
-        OrigSnowTexture?.Release();
-        OrigSnowTexture = new(1400, 800, 0, DefaultFormat.LDR);
 
         //setup constants
         Shader.SetGlobalFloat("TheLazyCowboy1_Warp", Options.Warp.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarp", Options.MaxWarpFactor.Value);
 
-        float startOffset = Mathf.Max(Options.StartOffset.Value, depthCurve(-0.2f)); //prevent unnecessary processing
+        float startOffset = clampedDepthCurve(-0.2f); //prevent unnecessary processing
         int testNum = Mathf.Max(2, (int)Mathf.Ceil(Mathf.Abs(Options.Warp.Value) * Options.MaxWarpFactor.Value * (Options.EndOffset.Value - startOffset) / Options.Optimization.Value));
         Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum);
         Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (Options.EndOffset.Value - startOffset) / testNum);
@@ -162,7 +225,9 @@ public partial class Plugin : BaseUnityPlugin
         Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundScale", Options.BackgroundScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_AntiAliasingFac", Options.AntiAliasing.Value * 2.5f);
-        Shader.SetGlobalFloat("TheLazyCowboy1_MaxXDistance", Options.MaxXDistance.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_MaxXDistance",Options.MaxXDistance.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_ProjectionMod", Options.DepthScale.Value);
+        Shader.SetGlobalFloat("TheLazyCowboy1_MinObjectDepth", Options.MinObjectDepth.Value);
         Shader.SetGlobalFloat(ShadCamPosX, 0.5f);
         Shader.SetGlobalFloat(ShadCamPosY, 0.5f);
 
@@ -208,37 +273,90 @@ public partial class Plugin : BaseUnityPlugin
                 break;
         }
 
-        if (Options.DynamicOptimization.Value && !Shader.IsKeywordEnabled("THELAZYCOWBOY1_DYNAMICOPTIMIZATION"))
+        if (Options.DynamicOptimization.Value)
             Shader.EnableKeyword("THELAZYCOWBOY1_DYNAMICOPTIMIZATION");
-        else if (!Options.DynamicOptimization.Value && Shader.IsKeywordEnabled("THELAZYCOWBOY1_DYNAMICOPTIMIZATION"))
+        else
             Shader.DisableKeyword("THELAZYCOWBOY1_DYNAMICOPTIMIZATION");
 
-        if (Options.NoCenterWarp.Value && !Shader.IsKeywordEnabled("THELAZYCOWBOY1_NOCENTERWARP"))
+        if (Options.NoCenterWarp.Value)
             Shader.EnableKeyword("THELAZYCOWBOY1_NOCENTERWARP");
-        else if (!Options.NoCenterWarp.Value && Shader.IsKeywordEnabled("THELAZYCOWBOY1_NOCENTERWARP"))
+        else
             Shader.DisableKeyword("THELAZYCOWBOY1_NOCENTERWARP");
 
-        if (Options.ClosestPixelOnly.Value && !Shader.IsKeywordEnabled("THELAZYCOWBOY1_CLOSESTPIXELONLY"))
+        if (Options.ClosestPixelOnly.Value)
             Shader.EnableKeyword("THELAZYCOWBOY1_CLOSESTPIXELONLY");
-        else if (!Options.ClosestPixelOnly.Value && Shader.IsKeywordEnabled("THELAZYCOWBOY1_CLOSESTPIXELONLY"))
+        else
             Shader.DisableKeyword("THELAZYCOWBOY1_CLOSESTPIXELONLY");
+
+        if (Options.ShaderLayers.Value >= 2)
+            Shader.EnableKeyword("THELAZYCOWBOY1_PROCESSLAYER2");
+        else
+            Shader.DisableKeyword("THELAZYCOWBOY1_PROCESSLAYER2");
+
+        if (Options.ShaderLayers.Value >= 3)
+            Shader.EnableKeyword("THELAZYCOWBOY1_PROCESSLAYER3");
+        else
+            Shader.DisableKeyword("THELAZYCOWBOY1_PROCESSLAYER3");
+
+        if (Options.SimplerBackgrounds.Value)
+            Shader.EnableKeyword("THELAZYCOWBOY1_SIMPLERLAYERS");
+        else
+            Shader.DisableKeyword("THELAZYCOWBOY1_SIMPLERLAYERS");
 
         Logger.LogDebug("Setup shader constants");
 
+
         orig(self, game, cameraNumber);
 
-        //FSprite shaderSprite = new("Futile_White");
-        //shaderSprite.scaleX = 1400f;//self.sSize.x;
-        //shaderSprite.scaleY = 800f;// self.sSize.y;
-        //shaderSprite.shader = parallaxFShader;
-        //self.ReturnFContainer("Foreground").AddChildAtIndex(shaderSprite, 1);
+
+        //Setup rendertextures and buffers
+
+        //clear out old arrays
+        for (int i = 0; i < CachedTextureCount; i++)
+        {
+            LayerRooms[i] = null;
+            Layer2TexArray[i]?.Release();
+            Layer2TexArray[i] = null;
+            Layer3TexArray[i]?.Release();
+            Layer3TexArray[i] = null;
+        }
+
+        CurLayerIdx = 0;
+        CachedTextureCount = Options.CachedRenderTextures.Value;
+        LayerRooms = new string[CachedTextureCount];
+        Layer2TexArray = new RenderTexture[CachedTextureCount];
+        Layer3TexArray = new RenderTexture[CachedTextureCount];
+
+        //fill new arrays with textures
+        if (Options.ShaderLayers.Value >= 2)
+        {
+            for (int i = 0; i < CachedTextureCount; i++)
+            {
+                LayerRooms[i] = "";
+                Layer2TexArray[i] = MakeRenderTex(1400, 800);
+                if (Options.ShaderLayers.Value >= 3)
+                {
+                    Layer3TexArray[i] = MakeRenderTex(1400, 800);
+                }
+            }
+        }
+
+        PreLoadedLayer2 = null;
+        PreLoadedLayer3 = null;
+        //LastGeneratedRoom = "";
+        GeneratedBackgrounds.Clear();
+
+        OrigSnowTexture?.Release();
+        //OrigSnowTexture = new(1400, 800, 0, DefaultFormat.LDR) { filterMode = 0 };
+
     }
 
     //Actually adds the shader to the LevelTexCombiner whenever the LevelTexCombiner gets cleared
     //ALSO attempts to resolution scale...
+    //And builds the 2nd and 3rd layers...
     private void RoomCamera_ApplyPositionChange(On.RoomCamera.orig_ApplyPositionChange orig, RoomCamera self)
     {
-        Vector2 origSize = Vector2.zero; //say origSize was 0 if it didn't exist before
+        IntVector2 origSize = new(0, 0); //say origSize was 0 if it didn't exist before
         if (self.levelTexCombiner.combinedLevelTex == null) //SBCameraScroll refuses to resize unless the texture already exists; a big shortcoming
             self.levelTexCombiner.Initialize();
         else
@@ -246,28 +364,135 @@ public partial class Plugin : BaseUnityPlugin
 
         orig(self);
 
+        if (self.room == null) return;
+
         //Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", self.levelTexture);
         try
         {
-            //Resolution Scale in a SBCameraScroll-friendly way
             var t = self.levelTexCombiner;
-            if (Options.ResolutionScaleEnabled.Value && (t.combinedLevelTex.width != origSize.x || t.combinedLevelTex.height != origSize.y))
-            {
-                if (!t.isActive)
-                    t.Initialize();
-                t.combinedLevelTex.Release();
-                t.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(t.combinedLevelTex.width * Options.ResolutionScale.Value), Mathf.RoundToInt(t.combinedLevelTex.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
-                t.combinedLevelTex.filterMode = 0;
-                t.intermediateTex.Release();
-                t.intermediateTex = new RenderTexture(Mathf.RoundToInt(t.intermediateTex.width * Options.ResolutionScale.Value), Mathf.RoundToInt(t.intermediateTex.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
-                t.intermediateTex.filterMode = 0;
 
+            IntVector2 size = new(t.combinedLevelTex.width, t.combinedLevelTex.height);
+
+            //create background textures
+            if (Options.ShaderLayers.Value > 1)
+            {
+                IncrementLayerIdx();
+
+                //scale background textures for SBCameraScroll
+                if (size.x != Layer2Tex.width || size.y != Layer2Tex.height)
+                {
+                    Layer2Tex.Release();
+                    Layer2Tex = MakeRenderTex(size.x, size.y);
+                    Layer3Tex.Release();
+                    Layer3Tex = MakeRenderTex(size.x, size.y);
+                }
+
+                string room = self.room.abstractRoom.name + "_" + (self.currentCameraPosition + 1).ToString();
+                //bool generateBackground = true;
+                //Load from cache
+                if (LayerRooms.Contains(room))
+                {
+                    //generateBackground = false;
+                    SwitchToLayerIdx(Array.IndexOf(LayerRooms, room));
+                    Shader.SetGlobalTexture("_TheLazyCowboy1_Layer2Tex", Layer2Tex);
+                    Shader.SetGlobalTexture("_TheLazyCowboy1_Layer3Tex", Layer3Tex);
+
+                    Logger.LogDebug($"Switching to background image {CurLayerIdx} for " + room);
+                }
+                //Generate/load the background textures
+                else if (CanRenderBackground)
+                {
+                    CanRenderBackground = false;
+                    CurRoom = room;
+
+                    CommandBuffer buffer = new() { name = "TheLazyCowboy1_BackgroundBuilder" };
+                    if (PreLoadedLayer2 != null)
+                    { //pre-load layer 2
+                        Texture2D l2Tex = MakeTex2D(self.levelTexture.width, self.levelTexture.height);
+                        l2Tex.LoadImage(PreLoadedLayer2, false);
+                        l2Tex.Apply();
+                        buffer.Blit(l2Tex, Layer2Tex);
+                        if (Options.ShaderLayers.Value < 3) CanRenderBackground = true;
+                    }
+                    else //generate layer 2
+                    {
+                        buffer.Blit(self.levelTexture, Layer2Tex, Layer2BuilderMaterial);
+                        buffer.RequestAsyncReadback(Layer2Tex, result =>
+                        {
+                            if (result.done)
+                            {
+                                if (result.hasError)
+                                    Logger.LogError("Error generating layer 2 texture for " + room);
+                                else if (Options.SaveBackgroundTextures.Value)
+                                    SaveBackgroundTexture(result, room + "_l2");
+
+                                if (Options.ShaderLayers.Value < 3)
+                                {
+                                    CanRenderBackground = true;
+                                    buffer.Release();
+                                }
+                            }
+                        });
+                    }
+                    buffer.SetGlobalTexture("_TheLazyCowboy1_Layer2Tex", Layer2Tex);
+
+                    if (Options.ShaderLayers.Value >= 3)
+                    {
+                        if (PreLoadedLayer3 != null)
+                        { //pre-load layer 3
+                            Texture2D l3Tex = MakeTex2D(self.levelTexture.width, self.levelTexture.height);
+                            l3Tex.LoadImage(PreLoadedLayer3, false);
+                            l3Tex.Apply();
+                            buffer.Blit(l3Tex, Layer3Tex);
+                            CanRenderBackground = true;
+                        }
+                        else
+                        {
+                            Layer3BuilderMaterial.SetTexture("_Layer2Tex", Layer2Tex);
+                            //buffer.EnableShaderKeyword("THELAZYCOWBOY1_INCLUDELAYER2");
+                            buffer.Blit(self.levelTexture, Layer3Tex, Layer3BuilderMaterial);
+                            //buffer.DisableShaderKeyword("THELAZYCOWBOY1_INCLUDELAYER2");
+                            buffer.RequestAsyncReadback(Layer3Tex, result =>
+                            {
+                                if (result.done)
+                                {
+                                    if (result.hasError)
+                                        Logger.LogError("Error generating layer 3 texture for " + room);
+                                    else if (Options.SaveBackgroundTextures.Value)
+                                        SaveBackgroundTexture(result, room + "_l3");
+
+                                    CanRenderBackground = true;
+                                    buffer.Release();
+                                }
+                            });
+                        }
+                        buffer.SetGlobalTexture("_TheLazyCowboy1_Layer3Tex", Layer3Tex);
+                    }
+
+                    Graphics.ExecuteCommandBufferAsync(buffer, ComputeQueueType.Background);
+                    
+                    Logger.LogDebug($"Generating or loading background image {CurLayerIdx} for " + room);
+                }
+                PreLoadedLayer2 = null;
+                PreLoadedLayer3 = null;
+            }
+
+            //Resolution Scale in a SBCameraScroll-friendly way
+            if (Options.ResolutionScaleEnabled.Value && (size.x != origSize.x || size.y != origSize.y))
+            {
+                t.combinedLevelTex.Release();
+                t.combinedLevelTex = MakeRenderTex(Mathf.RoundToInt(size.x * Options.ResolutionScale.Value),
+                    Mathf.RoundToInt(size.y * Options.ResolutionScale.Value));
+
+                t.intermediateTex.Release();
+                t.intermediateTex = MakeRenderTex(Mathf.RoundToInt(t.intermediateTex.width * Options.ResolutionScale.Value),
+                    Mathf.RoundToInt(t.intermediateTex.height * Options.ResolutionScale.Value));
+                
                 Logger.LogDebug($"Upscaled level texture to {t.combinedLevelTex.width}x{t.combinedLevelTex.height}");
             }
 
-            //t.AddPass(RenderTexture.GetTemporary(1400, 800), parallaxMaterial, parallaxShader.name, LevelTexCombiner.last);
+            //Add the parallax shader pass
             t.AddPass(ParallaxShader, ParallaxShader.name, LevelTexCombiner.last);
-            //Logger.LogDebug($"Added {parallaxShader.name} shader pass!"); //happens every screen change; annoying log spam
         }
         catch (Exception ex) { Logger.LogError(ex); }
     }
@@ -278,14 +503,12 @@ public partial class Plugin : BaseUnityPlugin
     public static Dictionary<int, Vector2> MidpointWarp = new(4);
 
     //Sets the CamPos
-    private void RoomCamera_GetCameraBestIndex(On.RoomCamera.orig_GetCameraBestIndex orig, RoomCamera self)
+    public void SetCamPos(RoomCamera self, float moveMod = 1)
     {
-        orig(self);
-
         Vector2 pos = new(0.5f, 0.5f);
 
         if (!CamPos.ContainsKey(self.cameraNumber))
-            CamPos.Add(self.cameraNumber, new (0.5f, 0.5f));
+            CamPos.Add(self.cameraNumber, new(0.5f, 0.5f));
 
         //Follow creatures
         var crit = self.followAbstractCreature?.realizedCreature;
@@ -330,7 +553,8 @@ public partial class Plugin : BaseUnityPlugin
         pos.y = Mathf.Clamp01(pos.y);
 
         //Actually change camera position
-        CamPos[self.cameraNumber] += Options.CameraMoveSpeed.Value * (new float2(pos.x, pos.y) - CamPos[self.cameraNumber]);
+        CamPos[self.cameraNumber] += moveMod * Options.CameraMoveSpeed.Value
+            * (new float2(pos.x, pos.y) - CamPos[self.cameraNumber]);
         if (Options.InvertPos.Value)
         {
             Shader.SetGlobalFloat(ShadCamPosX, 1f - CamPos[self.cameraNumber].x);
@@ -345,57 +569,167 @@ public partial class Plugin : BaseUnityPlugin
 
         MidpointWarp.Remove(self.cameraNumber); //cam pos changed, so midpoint needs to be recalculated if it's there
     }
+    //private void RoomCamera_GetCameraBestIndex(On.RoomCamera.orig_GetCameraBestIndex orig, RoomCamera self)
+    private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
+    {
+        orig(self, timeStacker, timeSpeed);
+
+        SetCamPos(self, 0.5f * timeSpeed);
+    }
+
+    private void RoomCamera_Update(On.RoomCamera.orig_Update orig, RoomCamera self)
+    {
+        orig(self);
+
+        SetCamPos(self, 0.5f);
+
+        WarpBackgroundAndSnow(self);
+    }
+
     private Vector2 GetMidpointWarp(int cameraNumber)
     {
         if (!MidpointWarp.ContainsKey(cameraNumber)) MidpointWarp.Add(cameraNumber, CalculateWarp(new(0.5f, 0.5f), CamPos[cameraNumber]));
         return MidpointWarp[cameraNumber];
     }
 
-
-    //Resolution Scaling
-    [Obsolete]
-    private void LevelTexCombiner_CreateBuffer(On.Watcher.LevelTexCombiner.orig_CreateBuffer orig, LevelTexCombiner self, string id, RenderTargetIdentifier texture, Material material, CameraEvent evt)
-    {
-        try
-        {
-            if (Options.ResolutionScaleEnabled.Value && (int)evt == 10)
-            {
-                var source = Custom.rainWorld.persistentData.cameraTextures[0, 0];
-
-                self.combinedLevelTex = new RenderTexture(Mathf.RoundToInt(source.width * Options.ResolutionScale.Value), Mathf.RoundToInt(source.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
-                self.combinedLevelTex.filterMode = 0;
-                self.intermediateTex = new RenderTexture(Mathf.RoundToInt(source.width * Options.ResolutionScale.Value), Mathf.RoundToInt(source.height * Options.ResolutionScale.Value), 0, DefaultFormat.LDR);
-                self.intermediateTex.filterMode = 0;
-                Shader.SetGlobalTexture("_LevelTex", self.combinedLevelTex);
-            }
-
-            orig(self, id, texture, material, evt);
-        }
-        catch (Exception ex) { Logger.LogError(ex); }
-    }
-
-
-    //Forces the snow to use the combined level texture
+    //Saves an unwarped version of the snow texture whenever a new snow texture is created
     private void RoomCamera_UpdateSnowLight(On.RoomCamera.orig_UpdateSnowLight orig, RoomCamera self)
     {
-        /*if (self.levelTexCombiner.isActive)
-        {
-            Shader.DisableKeyword("COMBINEDLEVEL");
-            orig(self);
-            Shader.EnableKeyword("COMBINEDLEVEL");
-        }
-        else orig(self);*/
         orig(self);
 
         //Save the new snow texture, so I don't accidentally overwrite it...
-        //OrigSnowTexture?.Release();
-        //OrigSnowTexture = new(self.SnowTexture);
-        //OrigSnowTexture.Create();
-        //Logger.LogDebug($"OrigSnowTexture: {OrigSnowTexture.width}x{OrigSnowTexture.height}");
         if (Options.WarpSnow.Value)
+        {
+            //scale snow texture for SBCameraScroll
+            if (OrigSnowTexture == null || self.SnowTexture.width != OrigSnowTexture.width || self.SnowTexture.height != OrigSnowTexture.height)
+            {
+                OrigSnowTexture?.Release();
+                OrigSnowTexture = MakeRenderTex(self.SnowTexture.width, self.SnowTexture.height);
+                //IntermediateSnowTex?.Release();
+                //IntermediateSnowTex = new(self.SnowTexture.width, self.SnowTexture.height, 0, DefaultFormat.LDR) { filterMode = 0 };
+            }
             Graphics.Blit(self.SnowTexture, OrigSnowTexture);
+        }
     }
 
+    //Background texture preloading
+    private void RoomCamera_PreLoadTexture(On.RoomCamera.orig_PreLoadTexture orig, RoomCamera self, Room room, int camPos)
+    {
+        string qt = self.quenedTexture;
+
+        orig(self, room, camPos);
+
+        //There must have been a change
+        if (self.quenedTexture != qt && Options.PreLoadBackgroundTextures.Value && Options.ShaderLayers.Value >= 2)
+        {
+            string name = room.abstractRoom.name + "_" + (camPos + 1);
+            if (!LayerRooms.Contains(name)) //don't preload if it's already cached
+            {
+                PreLoadedLayer2 = PreLoadBackgroundTexture(name + "_l2");
+                if (Options.ShaderLayers.Value >= 3)
+                    PreLoadedLayer3 = PreLoadBackgroundTexture(name + "_l3");
+            }
+        }
+    }
+
+    private void RoomCamera_MoveCamera2(On.RoomCamera.orig_MoveCamera2 orig, RoomCamera self, string roomName, int camPos)
+    {
+        bool applyPos = self.applyPosChangeWhenTextureIsLoaded;
+
+        orig(self, roomName, camPos);
+
+        //There must have been a change
+        if (self.applyPosChangeWhenTextureIsLoaded && self.applyPosChangeWhenTextureIsLoaded != applyPos && Options.PreLoadBackgroundTextures.Value && Options.ShaderLayers.Value >= 2)
+        {
+            string name = roomName + "_" + (camPos + 1);
+            if (!LayerRooms.Contains(name)) //don't preload if it's already cached
+            {
+                PreLoadedLayer2 = PreLoadBackgroundTexture(name + "_l2");
+                if (Options.ShaderLayers.Value >= 3)
+                    PreLoadedLayer3 = PreLoadBackgroundTexture(name + "_l3");
+            }
+        }
+    }
+
+    //Preload all textures in the world
+    private void WorldLoader_CreatingWorld(On.WorldLoader.orig_CreatingWorld orig, WorldLoader self)
+    {
+        if (Options.PreLoadWorld.Value && Options.ShaderLayers.Value >= 2)
+        {
+            try
+            {
+                //This overly complex logic is done to arrange rooms in an order from closest to farthest from the player
+                //so that if, say, only half of rooms are generated, at least it's the closest half.
+
+                List<string> screens = new();
+                List<int> roomsFound = new(), tempRooms = new();
+                List<bool> roomSearched = new();
+                //foreach (string[] r in self.roomAdder)
+                bool anyFound = true;
+                AbstractRoom firstRoom;
+                if (!self.singleRoomWorld && self.game.IsStorySession)
+                {
+                    //var saveState = (self.game.session as StoryGameSession).saveState;
+                    firstRoom = (self.abstractRooms.Find(room => room.name == self.game.overWorld.reportBackToGate?.room?.abstractRoom?.name) //gates
+                        ?? (self.abstractRooms.Find(room => room.name == (self.game.session as StoryGameSession).saveState.GetSaveStateDenToUse()) //waking up in a shelter
+                        ?? self.abstractRooms.Find(room => room.name == self.game.manager.menuSetup.regionSelectRoom))) //for fast travel
+                        ?? self.abstractRooms[0];
+                }
+                else firstRoom = self.abstractRooms[0];
+
+                Logger.LogDebug("Starting room: " + firstRoom.name);
+                roomsFound.Add(firstRoom.index - self.world.firstRoomIndex);
+                roomSearched.Add(false);
+
+                while (anyFound)
+                {
+                    anyFound = false;
+                    //foreach (int i in roomsFound)
+                    for (int i = 0; i < roomsFound.Count; i++)
+                    {
+                        if (!roomSearched[i]) //don't search rooms that we've already searched
+                        {
+                            AbstractRoom r = self.abstractRooms[roomsFound[i]];
+                            foreach (int c in r.connections)
+                            {
+                                if (c >= 0)
+                                {
+                                    int idx = c - self.world.firstRoomIndex;
+                                    if (!roomsFound.Contains(idx) && !tempRooms.Contains(idx))
+                                    {
+                                        tempRooms.Add(idx);
+                                        roomSearched.Add(false);
+                                        anyFound = true;
+                                    }
+                                }
+                            }
+                            roomSearched[i] = true;
+                        }
+                    }
+                    roomsFound.AddRange(tempRooms);
+                    tempRooms.Clear();
+                }
+                //convert rooms to screens
+                //foreach (var room in roomsFound)
+                foreach (int idx in roomsFound)
+                {
+                    //string r = room.name;
+                    string r = self.abstractRooms[idx].name;
+                    for (int i = 1; WorldLoader.FindRoomFile(r, false, $"_{i}.png") != null; i++)
+                        screens.Add(r + "_" + i);
+                }
+                roomsFound.Clear();
+                roomSearched.Clear();
+
+                Logger.LogDebug($"Creating batch background textures for {self.worldName}: {screens.Count} rooms");
+                StartCoroutine(GenerateForAllRooms(screens));
+            }
+            catch (Exception ex) { Logger.LogError(ex); }
+        }
+
+        //Okay, now continue with your loading business!
+        orig(self);
+    }
     #endregion
 
     #region WarpCalc
@@ -417,7 +751,7 @@ public partial class Plugin : BaseUnityPlugin
                         var data = self.placedObject.data as PlacedObject.CustomDecalData; //use flat data instead of image depth?
                         //Vector2 warp = Options.Warp.Value * depthCurve(rCam.DepthAtCoordinate(self.verts[i]) * 1.2f - 0.2f)
                         //use the decal's depth (weighted towards the deeper part) to determine a warp factor
-                        Vector2 warp = depthCurve((0.3f * data.fromDepth + 0.7f * data.toDepth - 5f) * 0.04f) * CalculateWarp(localVert / rCam.sSize, pos);
+                        Vector2 warp = clampedDepthCurve((0.3f * data.fromDepth + 0.7f * data.toDepth - 5f) * 0.04f) * CalculateWarp(localVert / rCam.sSize, pos);
 
                         (sLeaser.sprites[0] as TriangleMesh).MoveVertice(i, localVert + warp);
                     }
@@ -427,13 +761,14 @@ public partial class Plugin : BaseUnityPlugin
         catch (Exception ex) { Logger.LogError(ex); }
     }
 
+
+    private bool shouldWarpSnow = true;
     //Attempts to warp background image, which I'm not sure is ever even used...
     //ALSO warps snow texture
-    private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
+    //private void RoomCamera_DrawUpdate(On.RoomCamera.orig_DrawUpdate orig, RoomCamera self, float timeStacker, float timeSpeed)
+    private void WarpBackgroundAndSnow(RoomCamera self)
     {
-        //self.snowChange = true;
-
-        orig(self, timeStacker, timeSpeed);
+        //orig(self, timeStacker, timeSpeed);
 
         //warp background
         if (Options.BackgroundWarp.Value > 0 && self.backgroundGraphic.isVisible && CamPos.ContainsKey(self.cameraNumber))
@@ -446,12 +781,22 @@ public partial class Plugin : BaseUnityPlugin
         }
 
         //warp snow
-        if (Options.WarpSnow.Value && Shader.IsKeywordEnabled("SNOW_ON"))
+        if (Options.WarpSnow.Value && OrigSnowTexture != null && Shader.IsKeywordEnabled("SNOW_ON"))
         {
-            Shader.EnableKeyword("THELAZYCOWBOY1_WARPMAINTEX");
-            Graphics.Blit(OrigSnowTexture, self.SnowTexture, ParallaxMaterial);
-            Shader.DisableKeyword("THELAZYCOWBOY1_WARPMAINTEX");
+            if (shouldWarpSnow) //every other frame
+            {
+                Shader.EnableKeyword("THELAZYCOWBOY1_WARPMAINTEX");
+                Graphics.Blit(OrigSnowTexture, self.SnowTexture, ParallaxMaterial);
+                Shader.DisableKeyword("THELAZYCOWBOY1_WARPMAINTEX");
+            }
+            shouldWarpSnow = !shouldWarpSnow;
+
+            //if (!SnowShaderActive || SnowWarpFence.passed)
+                //Graphics.ExecuteCommandBufferAsync(SnowWarpBuffer, ComputeQueueType.Background);
+            //SnowShaderActive = true;
         }
+        //else
+            //SnowShaderActive = false;
     }
 
     //Offsets the camera position used for backgrounds, helping to provide basic visual continuity
@@ -598,6 +943,68 @@ public partial class Plugin : BaseUnityPlugin
     }
 
 
+    //Terrain Curves... yay...
+    private void TerrainCurve_DrawSprites(ILContext il)
+    {
+        try
+        {
+            ILCursor c = new(il);
+
+            if (c.TryGotoNext(MoveType.After,
+                //x => x.MatchLdarg(1),
+                //x => x.MatchLdfld(typeof(RoomCamera.SpriteLeaser), nameof(RoomCamera.SpriteLeaser.sprites)),
+                x => x.MatchLdcI4(0),
+                x => x.MatchLdelemRef(),
+                x => x.MatchCastclass<TriangleMesh>(),
+                x => x.MatchStloc(5)
+                ))
+            {
+                c.Emit(OpCodes.Ldarg_0); //reference this
+                c.Emit(OpCodes.Ldarg_2); //reference rCam
+                c.EmitDelegate<Action<TerrainCurve, RoomCamera>>((curve, rCam) => {
+                    if (Options.WarpTerrainCurves.Value && CamPos.TryGetValue(rCam.cameraNumber, out var camPos))
+                    {
+                        //Check which points are actually on-screen; don't warp off-screen points
+                        //THIS PROBABLY COSTS AS MUCH AS SIMPLY WARPING EVERYTHING!!
+                        /*int onScreenStart = Int32.MaxValue, onScreenStop = curve.drawSegments - 1;
+                        for (int i = 0; i < curve.drawSegments; i++)
+                        {
+                            //Check if on screen
+                            Vector2 front = curve.drawFrontPoints[i], back = curve.drawBackPoints[i];
+                            if ((back.x >= 0 && back.x <= rCam.sSize.x && back.y >= 0 && back.y <= rCam.sSize.y)
+                            || (front.x >= 0 && front.x <= rCam.sSize.x && front.y >= 0 && front.y <= rCam.sSize.y))
+                            {
+                                onScreenStart = Math.Min(onScreenStart, i);
+                                onScreenStop = i + 1;
+                            }
+                        }
+
+                        //Warp the on-screen points (or any other relevant ones)
+                        for (int i = Math.Max(0, onScreenStart-1); i <= onScreenStop; i++)*/
+                        for (int i = 0; i < curve.drawSegments; i++)
+                        {
+                            float frontDepth = clampedDepthCurve((curve.minDepth - 5) * 0.04f);
+                            Vector2 frontWarp = frontDepth * CalculateWarp(curve.drawFrontPoints[i] / rCam.sSize, camPos);
+                            curve.drawBackPoints[i] -= Vector2.LerpUnclamped(frontWarp, CalculateWarp(curve.drawBackPoints[i] / rCam.sSize, camPos), (30 * 0.04f - frontDepth) / (1 - frontDepth));
+                            curve.drawFrontPoints[i] -= frontWarp;
+                        }
+                    }
+                });
+
+                Logger.LogDebug("TerrainCurve IL hook succeeded");
+            }
+            else
+            {
+                Logger.LogError("TerrainCurve IL hook failed");
+            }
+        }
+        catch (Exception ex) { Logger.LogError(ex); }
+    }
+
+    private float clampedDepthCurve(float d)
+    {
+        return (d <= Options.StartOffset.Value) ? d : depthCurve(d);//Mathf.Clamp(depthCurve(d), Options.StartOffset.Value, 1);
+    }
     private float depthCurve(float d)
     {
         switch (Options.DepthCurve.Value)
@@ -643,10 +1050,12 @@ public partial class Plugin : BaseUnityPlugin
             float camYDiff2 = 4 * (playerPos.y - 0.5f) * (playerPos.y - 0.5f);
             warp.y *= camYDiff2 * (2 - camYDiff2);
         }
+        float clamp = Options.DynamicOptimization.Value ? 1 : Options.MaxWarpFactor.Value;
         return Options.Warp.Value * new Vector2(
-            Mathf.Clamp(warp.x, -Options.MaxWarpFactor.Value, Options.MaxWarpFactor.Value),
-            Mathf.Clamp(warp.y, -Options.MaxWarpFactor.Value, Options.MaxWarpFactor.Value)
+            Mathf.Clamp(warp.x, -clamp, clamp),
+            Mathf.Clamp(warp.y, -clamp, clamp)
             );
     }
     #endregion
+
 }

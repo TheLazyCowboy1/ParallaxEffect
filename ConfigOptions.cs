@@ -48,7 +48,7 @@ public class ConfigOptions : OptionInterface
         SimplerBackgrounds = this.config.Bind<bool>("SimplerBackgrounds", true);
         DepthScale = this.config.Bind<float>("DepthScale", 0.5f, new ConfigAcceptableRange<float>(0, 30));
         MinObjectDepth = this.config.Bind<float>("MinObjectDepth", 3, new ConfigAcceptableRange<float>(-30, 30));
-        CachedRenderTextures = this.config.Bind<int>("CachedRenderTextures", 3, new ConfigAcceptableRange<int>(1, 10));
+        CachedRenderTextures = this.config.Bind<int>("CachedRenderTextures", 4, new ConfigAcceptableRange<int>(1, 20));
         PreLoadBackgroundTextures = this.config.Bind<bool>("PreLoadBackgroundTextures", true);
         SaveBackgroundTextures = this.config.Bind<bool>("SaveBackgroundTextures", true);
         OverwriteBackgroundTextures = this.config.Bind<bool>("OverwriteBackgroundTextures", false);
@@ -151,7 +151,7 @@ public class ConfigOptions : OptionInterface
             "3 Layers == VERY slow, but everything usually looks great." + 
             "2 layers is highly recommended if your GPU can handle it! However, 2 layers is roughly twice as expensive as 1.\n\n" +
             "1 Shader Layer: The fastest but most limited option. Here, the shader only uses the information given to it: The level texture. This is a flat 2D image, so the shader is limited. It has no clue what is \"behind\" things like poles, so it assumes everything extends back indefinitely.\n\n" +
-            "2 Shader Layers: Upon switching screens, a separate shader is run asynchronously (so it says; I have doubts) that generates a second \"background texture.\" This means that it tries to guess what is behind poles and such. This can have excellent results, but it suffers both from having to complexly generate a new level image and THEN has twice as much data to use, so it's almost twice as slow.\n\n" +
+            "2 Shader Layers: Upon switching screens, a separate shader generates a second \"background texture\" that tries to guess what is behind poles and such. This can have excellent results, but it suffers from having both to complexly generate a new level image and THEN process twice as much data, so it's almost twice as slow.\n\n" +
             "3 Shader Layers: Mostly the same as 2 layers, except a third layer is generated (using the info from the first two layers). This reduces some visual oddities with 2 layers, but makes generating the background textures take roughly 5 times longer, and the parallax shader itself is slightly slower."
             )
         { verticalAlignment = OpLabel.LabelVAlignment.Bottom };
@@ -225,7 +225,7 @@ public class ConfigOptions : OptionInterface
         OpHoldButton clearButton;
         layersTab.AddItems(
             new OpLabel(x, y, "EXTRA LAYERS SETTINGS", true),
-                new OpLabel(x2, y, "Generating backgrounds isn't perfect..."),
+                new OpLabel(x2, y, "For 2+ Shader Layers"),
 
             new OpLabel(t, y += H, "Simpler Layers"),
             new OpCheckBox(SimplerBackgrounds, x + c, y) { description = "Generates layers almost twice as fast, but they might look slightly worse (it's not very noticeable)." },
@@ -242,12 +242,13 @@ public class ConfigOptions : OptionInterface
             new OpCheckBox(SaveBackgroundTextures, x + c, y) { description = "Save textures to a file when generated, so that they can be loaded when the room is re-entered. This only takes a split second.\nDisabling this might save a few milliseconds when generating textures, but comes at the cost of having to re-generate the textures each time." },
             new OpLabel(t, y += h, "Overwrite Saved Textures"),
             new OpCheckBox(OverwriteBackgroundTextures, x + c, y) { description = "Ignores previously saved layer textures, regenerating them instead. However, it will not overwrite textures made in the same cycle.\nUseful only if you have changed Minimum Object Depth or Depth Scale and want those changes to apply to previous rooms." },
+            
             new OpLabel(t, y += H, "Batch Generate Region Textures"),
             new OpCheckBox(PreLoadWorld, x + c, y) { description = "Generates all the layer textures for each room in the region upfront. This can take a minute (literally) for 2 shader layers, or several minutes for 3 shader layers.\nPros: Once it's done, your gameplay should be smooth. Cons: Jarring; can take a LONG time for large regions." },
             new OpLabel(t, y += h, "Max Batch Size"),
             new OpUpdown(PreLoadRoomCap, new(x, y), w) { description = "The maximum number of screens that can be rendered in a single batch render. It prioritizes closer rooms, so setting this to 50 means that it only generates textures for the 50 closest rooms (if they don't have textures already).\nThis is important because if the batch size gets too large, it can crash your game. It also splits the process over multiple cycles." },
 
-            clearButton = new OpHoldButton(new(x, 15), new Vector2(200, 50), "Clear Saved Textures") { colorFill = new(0.7f, 0.1f, 0.1f), description = "Deletes all layer textures saved by this mod.\nUseful to clearing up disk space or applying changes to Minimum Object Depth or Depth Scale." }
+            clearButton = new OpHoldButton(new(x, 15), new Vector2(200, 50), "Clear Saved Textures") { colorFill = new(0.7f, 0.1f, 0.1f), colorEdge = new(0.7f, 0.1f, 0.1f), description = "Deletes all layer textures saved by this mod.\nUseful to clearing up disk space or applying changes to Minimum Object Depth or Depth Scale." }
             );
         clearButton.OnPressDone += ClearButton_OnPressDone;
 
@@ -272,74 +273,6 @@ public class ConfigOptions : OptionInterface
             resolutionScaleCheckbox,
             resolutionScaleUpdown
             );
-
-        //General Options
-        /*optionsTab.AddItems(
-            new OpLabel(t, y, "Pixel Warp Factor"),
-            new OpUpdown(Warp, new(x, y), w, 1) { description = "The amount in pixels (roughly) to warp the texture by." },
-                new OpLabel(t2, y, "[TEMPORARY] Advanced Shader"),
-                new OpCheckBox(AdvancedShader, x2 + c, y) { description = "Note to self: Please re-arrange config menu." },
-            new OpLabel(t, y += h, "Max Warp"),
-            //new OpUpdown(MaxWarp, new(x, y), w, 1) { description = "The maximum amount in pixels (roughly) by which the texture can be warped. This should be <= the Warp Factor.\nUseful for performance reasons: lower values = better performance." },
-            new OpUpdown(MaxWarpFactor, new(x, y), w, 2) { description = "The maximum amount by which the texture can be warped, expressed as a fraction of the Warp Factor.\nUseful for performance reasons: lower values = better performance." },
-                new OpLabel(t2, y, "[TEMPORARY] Use Third Layer"),
-                new OpCheckBox(ThirdLayer, x2 + c, y) { description = "Yeah this config menu definitely needs to be re-arranged. Hopefully that'll be done sometime soon...\nThis technically works for now, though." },
-            new OpLabel(t, y += h, "Optimization"),
-            new OpUpdown(Optimization, new(x, y), w, 2) { description = "Used to reduce the number of calculations, at the risk of visual artifacts (especially on small plants).\n1.00 = unoptimized, 2.00 = reasonably stable. Below 1 will severely increase lag with nominal visual difference." },
-                new OpLabel(t2, y, "Dynamic Optimization"),
-                new OpCheckBox(DynamicOptimization, x2 + c, y) { description = "Dynamically scales the optimization so that pixels closer to the player are cheaper.\nPotentially causes minor visual artifacts while moving, but usually saves A LOT of processing." },
-            new OpLabel(t, y += h, "Minimum Warp"),
-            new OpUpdown(StartOffset, new(x, y), w, 2) { description = "The lowest amount by which pixels can be warped. If set < 0, allows objects to \"project into the screen,\" which looks like more realistic rotation but might be annoying.\nI recommend setting it >= -0.20. Below -0.20 only has an effect for EXTREME or PARABOLIC depth curves. 0.00 disables \"projecting into the screen.\"" },
-                //new OpLabel(t2, y, "[ADVANCED] Maximum Tested Warp"),
-                //new OpUpdown(EndOffset, new(x2, y), w, 2) { description = "ADVANCED: Keep this at 1.00. In theory, raising it above 1.00 only increases lag, and lowering it from 1.00 creates visual artifacts.\nMight be useful to increase to ~1.05 if Don't Extend Objects is checked?" },
-                new OpLabel(t2, y, "Projection Steepness/Fade"),
-                new OpUpdown(RedModScale, new(x2, y), w, 2) { description = "Scales how quickly warped things \"fade into the background.\" It is recommended to set < 1 for PARABOLIC and EXTREME depth curves.\nLow values = objects appear thick; High values = objects aren't \"projected backwards\" as noticably (they fade faster)." },
-            new OpLabel(t, y += h, "Convergence Scale"),
-            new OpUpdown(BackgroundScale, new(x, y), w, 2) { description = "How much to converge (shrink) the back of the room towards the camera location. Basically, higher values = back wall looks farther away.\n0.00 = Keeps vanilla proportions (and doesn't warp near the center) (but can look jittery due to aliasing). 1.00 = Makes things look deeper (and doesn't warp near the player)." },
-                new OpLabel(t2, y, "Anti-Aliasing"),
-                new OpUpdown(AntiAliasing, new(x2, y), w, 2) { description = "Attempts some form of anti-aliasing by randomly offsetting some pixels to make moving edges less straight.\nRecommended to keep BELOW 0.50, unless Convergence Scale is near 0.00." },
-            //new OpLabel(t, y += h, "[EXPERIMENTAL] Don't Extend Objects"),
-            //new OpCheckBox(ClosestPixelOnly, x + c, y) { description = "EXPERIMENTAL: Disables the assumption that all objects extend indefinitely far back. Instead, the shader will find the \"closest pixel\" if an exact color cannot be found.\nThis inevitably has some obvious visual artifacts, and is MUCH more performance-intensive." },
-            new OpLabel(t, y += h, "Invert Pos"),
-            new OpCheckBox(InvertPos, x + c, y) { description = "Makes the warp stronger closer to the player, and weaker further away.\nThis is more visually realistic, but not ideal for gameplay." },
-                //new OpLabel(t2, y, "Don't Warp when Centered"),
-                //new OpCheckBox(NoCenterWarp, x2 + c, y) { description = "Makes the warp factor scale according to how far away the player is from the center of the screen.\nThis means that the room will look totally normal when the player is in the center of the room." },
-                new OpLabel(t2, y, "Minimize Warp when Centered"),
-                new OpCheckBox(NoCenterWarp, x2 + c, y) { description = "NOT RECOMMENDED: SET BACKGROUND SCALE TO 0.00 INSTEAD. Makes the warp factor scale according to how far away the player is from the center of the screen.\nThis means that the room will look mostly unwarped when the player is in the center of the room. However, it can look quite unnatural due to the non-linear camera movement." },
-            new OpLabel(t, y += h, "Don't Follow Player"),
-            new OpCheckBox(AlwaysCentered, x + c, y) { description = "Always assumes the player is exactly in the center of the screen.\nRecommended for SBCameraScroll; otherwise this is pretty pointless. Might help motion-sensitive folks?" },
-            new OpLabel(t, y += h, "Warp Decals"),
-            new OpCheckBox(WarpDecals, x + c, y) { description = "Also warps decals added through dev tools. These are common occurrences.\nNOTE: Runs on the CPU, not on the GPU!! If there are a lot of decals, this will increase lag." },
-                new OpLabel(t2, y, "Warp Snow"),
-                new OpCheckBox(WarpSnow, x2 + c, y) { description = "Warps snow, but comes with a SEVERE performance cost in snowy rooms.\nHighly recommended unless your GPU can't handle it or Warp Factor is set very low." },
-            new OpLabel(t, y += h, "Background Offset"),
-            new OpUpdown(BackgroundWarp, new(x, y), w, 2) { description = "How much to offset the background graphic, in order to make it more consistent with the parallax effect. Expressed as a fraction of the Warp Factor.\nSet to 0.00 to disable. 1.00 == same as deepest room object." },
-                new OpLabel(t2, y, "Background Rotation"),
-                new OpUpdown(BackgroundRotation, new(x2, y), w, 2) { description = "Warps the center-point of the in-game parallax effect for backgrounds, thus making them somewhat appear to rotate.\nSet to 0.00 to disable. 1.00 == same as the Warp Factor." },
-            new OpLabel(t, y += h, "Camera Move Speed"),
-            new OpUpdown(CameraMoveSpeed, new(x, y), w, 2) { description = "How quickly the camera adjusts to position changes.\n1.00 = instantaneously; 0.00 = not at all; 0.10 = slowly." },
-                new OpLabel(t2, y, "Mouse Sensitivity"),
-                new OpUpdown(MouseSensitivity, new(x2, y), w, 2) { description = "The sensitivity with which mouse movements alter the camera position.\nSet to 0.00 to disable this feature entirely." },
-            new OpLabel(t + c, y += h, "[EXPERIMENTAL] Limit Projection"),
-                new OpLabel(t2, y, "Depth Scale"),
-                new OpUpdown(DepthScale, new(x2, y), w, 2) { description = "This should be directly tied to the Advanced Shader. Multiplies how deep objects will extend. This is more test text because I have a new keyboard.\nIt feels pretty good, but I'm not used to its dimensions." }
-            );
-        limitExtendCheckbox = new OpCheckBox(ClosestPixelOnly, x, y) { description = "EXPERIMENTAL: Disables the assumption that all objects extend indefinitely far back. Instead, the shader will find the \"closest pixel\" if an exact color cannot be found.\nThis inevitably leads to visual artifacts, and is more performance-intensive." };
-        limitExtendUpdown = new OpUpdown(MaxXDistance, new(x + c, y), w, 2) { description = "EXPERIMENTAL: How far objects are projected backward. If low, objects aren't stretched into the background. If high, they are.\n0.00 == objects are not projected backwards at all; >1 == objects are projected backwards indefinitely; same as if disabled" };
-        resolutionScaleCheckbox = new OpCheckBox(ResolutionScaleEnabled, x, y += h) { description = "EXPERIMENTAL: Enables the experimental resolution scale option. This is compatible with SBCameraScroll (but can be very laggy!!!), but doesn't work as well with Sharpener." };
-        resolutionScaleUpdown = new OpUpdown(ResolutionScale, new(x + c, y), w, 2) { description = "EXPERIMENTAL: Scales the resolution of the level texture to allow for finer details, but at a pretty big performance cost (especially with SBCameraScroll).\nYour recommended Resolution Scale ~= " + displayScaleString };
-        optionsTab.AddItems(
-            limitExtendCheckbox,
-            limitExtendUpdown,
-            new OpLabel(t + c, y, "[EXPERIMENTAL] Resolution Scale"),
-            resolutionScaleCheckbox,
-            resolutionScaleUpdown,
-            new OpLabel(t+w-20f, y+=h, "Distance Curve"), //keep this as the last option!
-            new OpListBox(SmoothingType, new(x-20f, y - 90f), w+w, smoothingValues) { description = "Makes the parallax effect more noticable by warping (horizontally) closer objects more. SINUSOIDAL produces the most pleasing and realistic result.\nLINEAR is the most optimized. INVERSE reduces the warping around the player, which might be nice for gameplay." },
-                new OpLabel(t2+w+20f, y, "Depth Curve"), //maybe could shift this to the right if we're running out of room?
-                new OpListBox(DepthCurve, new(x2+20f, y - 90f), w+w, depthCurveValues) { description = "EXTREME and PARABOLIC make shallower (closer) objects be warped more. INVERSE makes the effect negligible on shallow objects.\nIf LINEAR (fastest and most visually accurate setting), the deepest background is warped 5x more than the back wall, which I thought was too drastic." }
-            );
-        */
 
         if (!ResolutionScaleEnabled.Value)
         {

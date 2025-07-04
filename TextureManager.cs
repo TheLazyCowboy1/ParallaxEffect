@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Collections;
 using RWCustom;
 using System.Linq;
+using Unity.Collections;
 
 namespace ParallaxEffect;
 
@@ -93,6 +94,7 @@ public partial class Plugin
             {
                 //load tex
                 string path = WorldLoader.FindRoomFile(room, false, ".png");
+                    //if SBCameraScroll, the room found must be from SBCam to be valid
                 if (!File.Exists(path))
                 {
                     roomsRemaining--;
@@ -267,7 +269,8 @@ public partial class Plugin
 
     #region TextureSaving
 
-    public void SaveBackgroundTexture(AsyncGPUReadbackRequest result, string room)
+    public void SaveBackgroundTexture(AsyncGPUReadbackRequest result, string room)// => SaveBackgroundTexture(result, room, result.width, result.height);
+    //public void SaveBackgroundTexture(AsyncGPUReadbackRequest result, string room, int w, int h)
     {
         try
         {
@@ -286,10 +289,17 @@ public partial class Plugin
 
             //Texture2D newTex = new(texture.width, texture.height);
             //Graphics.CopyTexture(texture, newTex);
-            Texture2D tex = new(result.width, result.height);
-            tex.SetPixelData<Color>(result.GetData<Color>(), 0);
-            File.WriteAllBytes(path, tex.EncodeToPNG());
-            Logger.LogDebug("Saved background " + path);
+            //Texture2D tex = MakeTex2D(w, h);//new(result.width, result.height);
+            //tex.SetPixelData<Color>(result.GetData<Color>(), 0);
+            //File.WriteAllBytes(path, tex.EncodeToPNG());
+            File.WriteAllBytes(path, ImageConversion.EncodeNativeArrayToPNG(
+                    result.GetData<Color>(),
+                    SystemInfo.GetGraphicsFormat(DefaultFormat.LDR),
+                    (uint)result.width, (uint)result.height
+                    ).ToArray()
+                );
+
+            Logger.LogDebug($"Saved {result.width}x{result.height} background " + path);
         }
         catch (Exception ex) { Logger.LogError(ex); }
     }
@@ -340,4 +350,6 @@ public partial class Plugin
     //Don't load textures if they don't exist (duh) or overwrite is true AND the file is more than a minute old
     private bool UseBackgroundTexture(string path, string room) => File.Exists(path) && (!Options.OverwriteBackgroundTextures.Value || GeneratedBackgrounds.Contains(room));// || DateTime.UtcNow.Subtract(File.GetCreationTimeUtc(path)).TotalMinutes < 1.0);
     #endregion
+
+    //public static string CurCamPos(this RoomCamera self) => SBCameraScrollEnabled ? "sb" : (self.currentCameraPosition + 1).ToString();
 }

@@ -204,7 +204,7 @@ half4 frag (v2f i) : SV_Target
 
 #if THELAZYCOWBOY1_CLOSESTPIXELONLY
 	float bestScore = 20;
-	float invStepSize = 1 / stepSize;
+	//float invStepSize = 1 / stepSize;
 	float maxXDist = max(TheLazyCowboy1_MaxXDistance, stepSize);
 #endif
 
@@ -242,7 +242,7 @@ half4 frag (v2f i) : SV_Target
 		if (xDistance >= 0) {
 			fixed4 l2Col = tex2D(_TheLazyCowboy1_Layer2Tex, grabPos);
 			float length = max(l2Col.w * 1.24f, minLength); //1.24 = 31 * 0.04
-			if (xDistance <= length) {
+			if (xDistance < length) {
 	#if THELAZYCOWBOY1_WARPMAINTEX
 				bestGrabPos = grabPos;
 	#else
@@ -259,7 +259,7 @@ half4 frag (v2f i) : SV_Target
 				if (xDistance >= 0) {
 					fixed4 l3Col = tex2D(_TheLazyCowboy1_Layer3Tex, grabPos);
 					length = max(l3Col.w * 1.24f, minLength); //1.24 = 31 * 0.04
-					if (xDistance <= length) { //prevents layer 2 from extending back indefinitely
+					if (xDistance < length) { //prevents layer 2 from extending back indefinitely
 	#if THELAZYCOWBOY1_WARPMAINTEX
 						bestGrabPos = grabPos;
 	#else
@@ -274,7 +274,7 @@ half4 frag (v2f i) : SV_Target
 						newDepth = depthOfPixel(l3Col);
 						xDistance = percentage - newDepth; //hopefully layer 3 depth is always >= 0
 	#if THELAZYCOWBOY1_CLOSESTPIXELONLY
-						if (xDistance >= 0 && xDistance <= maxXDist) {
+						if (xDistance >= 0 && xDistance < maxXDist) {
 	#else
 						if (xDistance >= 0) { //assumes the third layer extends back indefinitely; an important catch-all!
 	#endif //closestPixelOnly
@@ -289,8 +289,9 @@ half4 frag (v2f i) : SV_Target
 						}
 	#if THELAZYCOWBOY1_CLOSESTPIXELONLY
 						else {
-							xDistance = abs(xDistance);
-							float score = (floor(xDistance * invStepSize) + newDepth) * stepSize; //newDepth is only a deciding factor if the distances are within 2 steps
+							//xDistance = abs(xDistance);
+							//float score = (floor(xDistance * invStepSize) + newDepth) * stepSize; //newDepth is only a deciding factor if the distances are within 2 steps
+							float score = (xDistance < 0) ? -percentage : xDistance + 2; //negative xDistance is ALWAYS preferable
 							if (score < bestScore) {
 		#if THELAZYCOWBOY1_WARPMAINTEX
 								bestGrabPos = grabPos;
@@ -313,7 +314,7 @@ half4 frag (v2f i) : SV_Target
 		if (xDistance >= 0) {
 			fixed4 l2Col = tex2D(_TheLazyCowboy1_Layer2Tex, grabPos);
 			float length = max(l2Col.w * 1.24f, minLength); //1.24 = 31 * 0.04
-			if (xDistance <= length) {
+			if (xDistance < length) {
 	#if THELAZYCOWBOY1_WARPMAINTEX
 				bestGrabPos = grabPos;
 	#else
@@ -328,7 +329,7 @@ half4 frag (v2f i) : SV_Target
 				newDepth = depthOfPixel(l2Col);
 				xDistance = percentage - max(newDepth, TheLazyCowboy1_StartOffset);
 	#if THELAZYCOWBOY1_CLOSESTPIXELONLY
-				if (xDistance >= 0 && xDistance <= maxXDist) {
+				if (xDistance >= 0 && xDistance < maxXDist) {
 	#else
 				if (xDistance >= 0) { //extends indefinitely
 	#endif
@@ -343,8 +344,9 @@ half4 frag (v2f i) : SV_Target
 				}
 	#if THELAZYCOWBOY1_CLOSESTPIXELONLY
 				else {
-					xDistance = abs(xDistance);
-					float score = (floor(xDistance * invStepSize) + newDepth) * stepSize; //newDepth is only a deciding factor if the distances are within 2 steps
+					//xDistance = abs(xDistance);
+					//float score = (floor(xDistance * invStepSize) + newDepth) * stepSize; //newDepth is only a deciding factor if the distances are within 2 steps
+					float score = (xDistance < 0) ? -percentage : xDistance + 2; //negative xDistance is ALWAYS preferable
 					if (score < bestScore) {
 		#if THELAZYCOWBOY1_WARPMAINTEX
 						bestGrabPos = grabPos;
@@ -363,7 +365,7 @@ half4 frag (v2f i) : SV_Target
 //1 layer
 #else
 	#if THELAZYCOWBOY1_CLOSESTPIXELONLY
-		if (xDistance >= 0 && xDistance <= maxXDist) {
+		if (xDistance >= 0 && xDistance < maxXDist) {
 	#else
 		if (xDistance >= 0) {
 	#endif
@@ -378,8 +380,9 @@ half4 frag (v2f i) : SV_Target
 		}
 	#if THELAZYCOWBOY1_CLOSESTPIXELONLY
 		else {
-			xDistance = abs(xDistance);
-			float score = (floor(xDistance * invStepSize) + newDepth) * stepSize; //newDepth is only a deciding factor if the distances are within 2 steps
+			//xDistance = abs(xDistance);
+			//float score = (floor(xDistance * invStepSize) + newDepth) * stepSize; //newDepth is only a deciding factor if the distances are within 2 steps
+			float score = (xDistance < 0) ? -percentage : xDistance + 2; //negative xDistance is ALWAYS preferable
 			if (score < bestScore) {
 		#if THELAZYCOWBOY1_WARPMAINTEX
 				bestGrabPos = grabPos;
@@ -410,6 +413,7 @@ half4 frag (v2f i) : SV_Target
 		if (notFound) { //found using closest pixel
 			redColorMod = redColorMod * max(noiseVal - 0.4f, 0);
 		} else {
+			redColorMod = abs(redColorMod);
 			redColorMod = redColorMod + min(redColorMod, 0.4f) * (noiseVal - 0.5f) * 0.5f; //up to ~5 pixel variation: 0.4 * 0.5 = 0.2; 0.2 * 25px = 5px
 		}
 #else

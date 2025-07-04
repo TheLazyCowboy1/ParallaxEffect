@@ -9,7 +9,6 @@ using Unity.Mathematics;
 using RWCustom;
 using Watcher;
 using UnityEngine.Rendering;
-using UnityEngine.Experimental.Rendering;
 using Graphics = UnityEngine.Graphics;
 using MonoMod.Cil;
 using Mono.Cecil.Cil;
@@ -29,7 +28,7 @@ public partial class Plugin : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.ParallaxEffect",
         MOD_NAME = "Parallax Effect",
-        MOD_VERSION = "0.0.5";
+        MOD_VERSION = "0.1.0";
 
 
     public static ConfigOptions Options;
@@ -99,6 +98,8 @@ public partial class Plugin : BaseUnityPlugin
     public Material Layer2BuilderMaterial, Layer3BuilderMaterial;
 
     public static string ModFolderPath = "";
+    public static bool SBCameraScrollEnabled = false;
+    public static string SBCameraScrollPath = "";
 
     public int ShadCamPosX = -1, ShadCamPosY = -1;
 
@@ -164,7 +165,16 @@ public partial class Plugin : BaseUnityPlugin
             catch (Exception ex) { Logger.LogError(ex); }
 
             ModFolderPath = ModManager.ActiveMods.Find(mod => mod.id == MOD_ID).path;
-            
+
+            var SBCameraScroll = ModManager.ActiveMods.Find(mod => mod.id == "SBCameraScroll");
+            if (SBCameraScroll != null)
+            {
+                SBCameraScrollEnabled = true;
+                SBCameraScrollPath = SBCameraScroll.path;
+                Logger.LogDebug($"SBCameraScroll enabled = {SBCameraScrollEnabled}; path = " + SBCameraScrollPath);
+            }
+            else SBCameraScrollEnabled = false;
+
             MachineConnector.SetRegisteredOI(MOD_ID, Options);
             IsInit = true;
 
@@ -360,34 +370,26 @@ public partial class Plugin : BaseUnityPlugin
         if (self.levelTexCombiner.combinedLevelTex == null) //SBCameraScroll refuses to resize unless the texture already exists; a big shortcoming
             self.levelTexCombiner.Initialize();
         else
-            origSize = new(self.levelTexCombiner.combinedLevelTex.width, self.levelTexCombiner.combinedLevelTex.height);
+            origSize = new(LevTex(self).width, LevTex(self).height);
 
         orig(self);
 
         if (self.room == null) return;
 
-        //Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", self.levelTexture);
+        //Shader.SetGlobalTexture("TheLazyCowboy1_ScreenTexture", LevTex(self));
         try
         {
             var t = self.levelTexCombiner;
 
-            IntVector2 size = new(t.combinedLevelTex.width, t.combinedLevelTex.height);
+            //Add the parallax shader pass
+            t.AddPass(ParallaxShader, ParallaxShader.name, LevelTexCombiner.last);
+
+            IntVector2 size = new(LevTex(self).width, LevTex(self).height);
 
             //create background textures
             if (Options.ShaderLayers.Value > 1)
             {
-                IncrementLayerIdx();
-
-                //scale background textures for SBCameraScroll
-                if (size.x != Layer2Tex.width || size.y != Layer2Tex.height)
-                {
-                    Layer2Tex.Release();
-                    Layer2Tex = MakeRenderTex(size.x, size.y);
-                    Layer3Tex.Release();
-                    Layer3Tex = MakeRenderTex(size.x, size.y);
-                }
-
-                string room = self.room.abstractRoom.name + "_" + (self.currentCameraPosition + 1).ToString();
+                string room = self.room.abstractRoom.name + "_" + ((size.x == 1400 && size.y == 800) ? (self.currentCameraPosition + 1).ToString() : "sb");
                 //bool generateBackground = true;
                 //Load from cache
                 if (LayerRooms.Contains(room))
@@ -402,13 +404,26 @@ public partial class Plugin : BaseUnityPlugin
                 //Generate/load the background textures
                 else if (CanRenderBackground)
                 {
+                    IncrementLayerIdx();
+
+                    //scale background textures for SBCameraScroll
+                    if (size.x != Layer2Tex.width || size.y != Layer2Tex.height)
+                    {
+                        Layer2Tex?.Release();
+                        Layer2Tex = MakeRenderTex(size.x, size.y);
+                        Layer3Tex?.Release();
+                        if (Options.ShaderLayers.Value >= 3)
+                            Layer3Tex = MakeRenderTex(size.x, size.y);
+                        Logger.LogDebug($"Resized layer textures: {Layer2Tex.width}x{Layer2Tex.height}");
+                    }
+
                     CanRenderBackground = false;
                     CurRoom = room;
 
                     CommandBuffer buffer = new() { name = "TheLazyCowboy1_BackgroundBuilder" };
                     if (PreLoadedLayer2 != null)
                     { //pre-load layer 2
-                        Texture2D l2Tex = MakeTex2D(self.levelTexture.width, self.levelTexture.height);
+                        Texture2D l2Tex = MakeTex2D(size.x, size.y);
                         l2Tex.LoadImage(PreLoadedLayer2, false);
                         l2Tex.Apply();
                         buffer.Blit(l2Tex, Layer2Tex);
@@ -416,7 +431,7 @@ public partial class Plugin : BaseUnityPlugin
                     }
                     else //generate layer 2
                     {
-                        buffer.Blit(self.levelTexture, Layer2Tex, Layer2BuilderMaterial);
+                        buffer.Blit(LevTex(self), Layer2Tex, Layer2BuilderMaterial);
                         buffer.RequestAsyncReadback(Layer2Tex, result =>
                         {
                             if (result.done)
@@ -440,7 +455,7 @@ public partial class Plugin : BaseUnityPlugin
                     {
                         if (PreLoadedLayer3 != null)
                         { //pre-load layer 3
-                            Texture2D l3Tex = MakeTex2D(self.levelTexture.width, self.levelTexture.height);
+                            Texture2D l3Tex = MakeTex2D(size.x, size.y);
                             l3Tex.LoadImage(PreLoadedLayer3, false);
                             l3Tex.Apply();
                             buffer.Blit(l3Tex, Layer3Tex);
@@ -450,7 +465,7 @@ public partial class Plugin : BaseUnityPlugin
                         {
                             Layer3BuilderMaterial.SetTexture("_Layer2Tex", Layer2Tex);
                             //buffer.EnableShaderKeyword("THELAZYCOWBOY1_INCLUDELAYER2");
-                            buffer.Blit(self.levelTexture, Layer3Tex, Layer3BuilderMaterial);
+                            buffer.Blit(LevTex(self), Layer3Tex, Layer3BuilderMaterial);
                             //buffer.DisableShaderKeyword("THELAZYCOWBOY1_INCLUDELAYER2");
                             buffer.RequestAsyncReadback(Layer3Tex, result =>
                             {
@@ -485,17 +500,16 @@ public partial class Plugin : BaseUnityPlugin
                     Mathf.RoundToInt(size.y * Options.ResolutionScale.Value));
 
                 t.intermediateTex.Release();
-                t.intermediateTex = MakeRenderTex(Mathf.RoundToInt(t.intermediateTex.width * Options.ResolutionScale.Value),
-                    Mathf.RoundToInt(t.intermediateTex.height * Options.ResolutionScale.Value));
+                t.intermediateTex = MakeRenderTex(t.combinedLevelTex.width, t.combinedLevelTex.height);
                 
                 Logger.LogDebug($"Upscaled level texture to {t.combinedLevelTex.width}x{t.combinedLevelTex.height}");
             }
-
-            //Add the parallax shader pass
-            t.AddPass(ParallaxShader, ParallaxShader.name, LevelTexCombiner.last);
         }
         catch (Exception ex) { Logger.LogError(ex); }
     }
+
+    //Weird SBCameraScroll practices...
+    private static Texture LevTex(RoomCamera self) => SBCameraScrollEnabled ? self.levelGraphic?._atlas?.texture : self.levelTexture;
 
 
     //public static float2 CamPos;
@@ -654,7 +668,7 @@ public partial class Plugin : BaseUnityPlugin
     //Preload all textures in the world
     private void WorldLoader_CreatingWorld(On.WorldLoader.orig_CreatingWorld orig, WorldLoader self)
     {
-        if (Options.PreLoadWorld.Value && Options.ShaderLayers.Value >= 2)
+        if (Options.PreLoadWorld.Value && Options.ShaderLayers.Value >= 2 && self.abstractRooms.Count > 2)
         {
             try
             {
@@ -715,6 +729,8 @@ public partial class Plugin : BaseUnityPlugin
                 {
                     //string r = room.name;
                     string r = self.abstractRooms[idx].name;
+                    if (SBCameraScrollEnabled && WorldLoader.FindRoomFile(r, false, $"_2.png") != null)
+                        continue; //only pre-generate 1-screen rooms for SBCameraScroll
                     for (int i = 1; WorldLoader.FindRoomFile(r, false, $"_{i}.png") != null; i++)
                         screens.Add(r + "_" + i);
                 }

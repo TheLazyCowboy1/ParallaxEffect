@@ -148,9 +148,9 @@ public class ConfigOptions : OptionInterface
             "Short Answer:\n" +
             "1 Layer == Fast, but poles and plants look stretched.\n" +
             "2 Layers == Medium, but intersecting poles/plants can have artifacts.\n" +
-            "3 Layers == VERY slow, but everything usually looks great." + 
+            "3 Layers == VERY slow, but everything usually looks great.\n" + 
             "2 layers is highly recommended if your GPU can handle it! However, 2 layers is roughly twice as expensive as 1.\n\n" +
-            "1 Shader Layer: The fastest but most limited option. Here, the shader only uses the information given to it: The level texture. This is a flat 2D image, so the shader is limited. It has no clue what is \"behind\" things like poles, so it assumes everything extends back indefinitely.\n\n" +
+            "1 Shader Layer: The fastest but most limited option. Here, the shader only uses the information given to it: The level texture. This is a flat 2D image, so it has no clue what is \"behind\" things like poles, so it assumes everything extends back indefinitely.\n\n" +
             "2 Shader Layers: Upon switching screens, a separate shader generates a second \"background texture\" that tries to guess what is behind poles and such. This can have excellent results, but it suffers from having both to complexly generate a new level image and THEN process twice as much data, so it's almost twice as slow.\n\n" +
             "3 Shader Layers: Mostly the same as 2 layers, except a third layer is generated (using the info from the first two layers). This reduces some visual oddities with 2 layers, but makes generating the background textures take roughly 5 times longer, and the parallax shader itself is slightly slower."
             )

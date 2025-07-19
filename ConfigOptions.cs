@@ -35,7 +35,8 @@ public class ConfigOptions : OptionInterface
         CameraMoveSpeed = this.config.Bind<float>("CameraMoveSpeed", 0.1f, new ConfigAcceptableRange<float>(0, 1));
         WarpDecals = this.config.Bind<bool>("WarpDecals", true);
         WarpSnow = this.config.Bind<bool>("WarpSnow", true);
-        WarpTerrainCurves = this.config.Bind<bool>("WarpTerrainCurves", true);
+        //WarpTerrainCurves = this.config.Bind<bool>("WarpTerrainCurves", true);
+        TerrainCurveWarp = this.config.Bind<float>("TerrainCurveWarp", 1, new ConfigAcceptableRange<float>(0, 5));
         BackgroundWarp = this.config.Bind<float>("BackgroundWarp", 1, new ConfigAcceptableRange<float>(0, 5));
         BackgroundRotation = this.config.Bind<float>("BackgroundRotation", 0.5f, new ConfigAcceptableRange<float>(0, 5));
         MouseSensitivity = this.config.Bind<float>("MouseSensitivity", 1f, new ConfigAcceptableRange<float>(0, 10));
@@ -76,7 +77,8 @@ public class ConfigOptions : OptionInterface
     public readonly Configurable<float> CameraMoveSpeed;
     public readonly Configurable<bool> WarpDecals;
     public readonly Configurable<bool> WarpSnow;
-    public readonly Configurable<bool> WarpTerrainCurves;
+    //public readonly Configurable<bool> WarpTerrainCurves;
+    public readonly Configurable<float> TerrainCurveWarp;
     public readonly Configurable<float> BackgroundWarp;
     public readonly Configurable<float> BackgroundRotation;
     public readonly Configurable<float> MouseSensitivity;
@@ -192,7 +194,8 @@ public class ConfigOptions : OptionInterface
             new OpLabel(t, y += h, "Warp Snow"),
             new OpCheckBox(WarpSnow, x + c, y) { description = "Warps snow, but comes with a SEVERE performance cost in snowy rooms.\nHighly recommended unless your GPU can't handle it or Warp Factor is set very low." },
             new OpLabel(t, y += h, "Warp Terrain Curves"),
-            new OpCheckBox(WarpTerrainCurves, x + c, y) { description = "Warps terrain curves (the curved terrain from the Watcher's campaign) in a somewhat crude fashion.\nThe cost is higher than I'd like, but not too bad." },
+            //new OpCheckBox(WarpTerrainCurves, x + c, y) { description = "Warps terrain curves (the curved terrain from the Watcher's campaign) in a somewhat crude fashion.\nThe cost is higher than I'd like, but not too bad." },
+            new OpUpdown(TerrainCurveWarp, new(x, y), w, 2) { description = "Warps terrain curves (the curved terrain from the Watcher's campaign) in a somewhat crude fashion.\nThe cost is higher than I'd like, but not too bad." },
             new OpLabel(t, y += h, "Background Offset"),
             new OpUpdown(BackgroundWarp, new(x, y), w, 2) { description = "How much to offset the background graphic, in order to make it more consistent with the parallax effect. Expressed as a fraction of the Warp Factor.\nSet to 0.00 to disable. 1.00 == same as deepest room object." },
             new OpLabel(t, y += h, "Background Rotation"),

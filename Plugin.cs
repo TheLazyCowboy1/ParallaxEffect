@@ -13,6 +13,7 @@ using Graphics = UnityEngine.Graphics;
 using MonoMod.Cil;
 using Mono.Cecil.Cil;
 using BepInEx.Logging;
+using System.Security.Cryptography;
 
 #pragma warning disable CS0618
 
@@ -28,7 +29,7 @@ public partial class Plugin : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.ParallaxEffect",
         MOD_NAME = "Parallax Effect",
-        MOD_VERSION = "0.1.0";
+        MOD_VERSION = "0.1.1";
 
 
     public static ConfigOptions Options;
@@ -80,6 +81,7 @@ public partial class Plugin : BaseUnityPlugin
             On.AboveCloudsView.DistantCloud.DrawSprites -= DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites -= FlyingCloud_DrawSprites;
             IL.TerrainCurve.DrawSprites -= TerrainCurve_DrawSprites;
+            //On.TerrainCurveMaskSource.DrawSprites -= TerrainCurveMaskSource_DrawSprites;
 
             //On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
 
@@ -134,6 +136,7 @@ public partial class Plugin : BaseUnityPlugin
             On.AboveCloudsView.DistantCloud.DrawSprites += DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites += FlyingCloud_DrawSprites;
             IL.TerrainCurve.DrawSprites += TerrainCurve_DrawSprites;
+            //On.TerrainCurveMaskSource.DrawSprites += TerrainCurveMaskSource_DrawSprites;
 
             //On.Watcher.LevelTexCombiner.CreateBuffer += LevelTexCombiner_CreateBuffer;
 
@@ -186,6 +189,7 @@ public partial class Plugin : BaseUnityPlugin
             throw;
         }
     }
+
     #endregion
 
     #region CameraHooks
@@ -978,7 +982,7 @@ public partial class Plugin : BaseUnityPlugin
                 c.Emit(OpCodes.Ldarg_0); //reference this
                 c.Emit(OpCodes.Ldarg_2); //reference rCam
                 c.EmitDelegate<Action<TerrainCurve, RoomCamera>>((curve, rCam) => {
-                    if (Options.WarpTerrainCurves.Value && CamPos.TryGetValue(rCam.cameraNumber, out var camPos))
+                    if (Options.TerrainCurveWarp.Value > 0 && CamPos.TryGetValue(rCam.cameraNumber, out var camPos))
                     {
                         //Check which points are actually on-screen; don't warp off-screen points
                         //THIS PROBABLY COSTS AS MUCH AS SIMPLY WARPING EVERYTHING!!
@@ -997,11 +1001,11 @@ public partial class Plugin : BaseUnityPlugin
 
                         //Warp the on-screen points (or any other relevant ones)
                         for (int i = Math.Max(0, onScreenStart-1); i <= onScreenStop; i++)*/
+                        float frontDepth = clampedDepthCurve((curve.minDepth - 5) * 0.04f);
                         for (int i = 0; i < curve.drawSegments; i++)
                         {
-                            float frontDepth = clampedDepthCurve((curve.minDepth - 5) * 0.04f);
-                            Vector2 frontWarp = frontDepth * CalculateWarp(curve.drawFrontPoints[i] / rCam.sSize, camPos);
-                            curve.drawBackPoints[i] -= Vector2.LerpUnclamped(frontWarp, CalculateWarp(curve.drawBackPoints[i] / rCam.sSize, camPos), (30 * 0.04f - frontDepth) / (1 - frontDepth));
+                            Vector2 frontWarp = Options.TerrainCurveWarp.Value * frontDepth * CalculateWarp(curve.drawFrontPoints[i] / rCam.sSize, camPos);
+                            curve.drawBackPoints[i] -= Vector2.LerpUnclamped(frontWarp, Options.TerrainCurveWarp.Value * CalculateWarp(curve.drawBackPoints[i] / rCam.sSize, camPos), (30 * 0.04f - frontDepth) / (1 - frontDepth));
                             curve.drawFrontPoints[i] -= frontWarp;
                         }
                     }
@@ -1016,6 +1020,40 @@ public partial class Plugin : BaseUnityPlugin
         }
         catch (Exception ex) { Logger.LogError(ex); }
     }
+
+    private void TerrainCurveMaskSource_DrawSprites(On.TerrainCurveMaskSource.orig_DrawSprites orig, TerrainCurveMaskSource self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        if (Options.TerrainCurveWarp.Value > 0 && CamPos.TryGetValue(rCam.cameraNumber, out var playerPos)) {
+            var m = sLeaser.maskSources[0]._mesh;
+
+            float frontDepth = clampedDepthCurve((self.MinDepth - 5) * 0.04f);
+            int start = Int32.MaxValue;
+            for (int i = 0; i < self.vertices.Length; i += 3)
+            {
+                if (self.vertices[i].x - camPos.x >= -10)
+                {
+                    start = i; break;
+                }
+            }
+            for (int i = start; i < self.vertices.Length; i += 3)
+            {
+                Vector2 frontWarp = Options.TerrainCurveWarp.Value * frontDepth * CalculateWarp((V2FromV3(self.vertices[i + 1]) - camPos) / rCam.sSize, playerPos);
+                m.vertices[i] = TerrainCurveMaskSource.To3D(V2FromV3(self.vertices[i]) + frontWarp, 0);
+                m.vertices[i + 1] = TerrainCurveMaskSource.To3D(V2FromV3(self.vertices[i + 1]) + frontWarp, 0);
+
+                Vector2 backWarp = Vector2.LerpUnclamped(frontWarp, Options.TerrainCurveWarp.Value * CalculateWarp((V2FromV3(self.vertices[i + 2]) - camPos) / rCam.sSize, camPos), (30 * 0.04f - frontDepth) / (1 - frontDepth));
+                m.vertices[i + 2] = TerrainCurveMaskSource.To3D(V2FromV3(self.vertices[i + 2]) + backWarp, 1);
+
+                if (self.vertices[i].x - camPos.x > rCam.sSize.x + 10) break;
+            }
+        }
+
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+    }
+    private static Vector2 V2FromV3(Vector3 v3) => new(v3.x, v3.y);
+
+
+    //Actual calculations
 
     private float clampedDepthCurve(float d)
     {

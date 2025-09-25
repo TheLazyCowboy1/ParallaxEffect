@@ -37,9 +37,9 @@ public class ConfigOptions : OptionInterface
         WarpSnow = this.config.Bind<bool>("WarpSnow", true);
         //WarpTerrainCurves = this.config.Bind<bool>("WarpTerrainCurves", true);
         TerrainCurveWarp = this.config.Bind<float>("TerrainCurveWarp", 1, new ConfigAcceptableRange<float>(0, 5));
-        BackgroundWarp = this.config.Bind<float>("BackgroundWarp", 1, new ConfigAcceptableRange<float>(0, 5));
-        BackgroundRotation = this.config.Bind<float>("BackgroundRotation", 0.5f, new ConfigAcceptableRange<float>(0, 5));
-        MouseSensitivity = this.config.Bind<float>("MouseSensitivity", 1f, new ConfigAcceptableRange<float>(0, 10));
+        BackgroundWarp = this.config.Bind<float>("BackgroundWarp", 1, new ConfigAcceptableRange<float>(-5, 5));
+        BackgroundRotation = this.config.Bind<float>("BackgroundRotation", 1, new ConfigAcceptableRange<float>(-5, 5));
+        MouseSensitivity = this.config.Bind<float>("MouseSensitivity", 1f, new ConfigAcceptableRange<float>(-10, 10));
         ResolutionScaleEnabled = this.config.Bind<bool>("ResolutionScaleEnabled", false);
         ResolutionScale = this.config.Bind<float>("ResolutionScale", 1, new ConfigAcceptableRange<float>(0.5f, 5));
         SmoothingType = this.config.Bind<string>("SmoothingType", "SINUSOIDAL", new ConfigAcceptableList<string>(smoothingValues));

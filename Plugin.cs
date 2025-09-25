@@ -29,7 +29,7 @@ public partial class Plugin : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.ParallaxEffect",
         MOD_NAME = "Parallax Effect",
-        MOD_VERSION = "0.1.1";
+        MOD_VERSION = "0.1.3";
 
 
     public static ConfigOptions Options;
@@ -791,7 +791,7 @@ public partial class Plugin : BaseUnityPlugin
         //orig(self, timeStacker, timeSpeed);
 
         //warp background
-        if (Options.BackgroundWarp.Value > 0 && self.backgroundGraphic.isVisible && CamPos.ContainsKey(self.cameraNumber))
+        if (Options.BackgroundWarp.Value != 0 && self.backgroundGraphic.isVisible && CamPos.ContainsKey(self.cameraNumber))
         {
             
             Vector2 warp = Options.BackgroundWarp.Value * GetMidpointWarp(self.cameraNumber);
@@ -822,7 +822,7 @@ public partial class Plugin : BaseUnityPlugin
     //Offsets the camera position used for backgrounds, helping to provide basic visual continuity
     private Vector2 BackgroundScene_DrawPos(On.BackgroundScene.orig_DrawPos orig, BackgroundScene self, Vector2 pos, float depth, Vector2 camPos, float hDisplace)
     {
-        if (Options.BackgroundWarp.Value > 0)
+        if (Options.BackgroundWarp.Value != 0)
         {
             var cameras = self.room.game.cameras;
             float lowestCamDist = float.PositiveInfinity;
@@ -835,9 +835,15 @@ public partial class Plugin : BaseUnityPlugin
 
             if (lowestCam != null && CamPos.ContainsKey(lowestCam.cameraNumber))
             {
-                camPos += Options.BackgroundWarp.Value * GetMidpointWarp(lowestCam.cameraNumber);
+                camPos -= Options.BackgroundWarp.Value
+                    * (self is RoofTopView ? CalculateWarp(new(0.5f, 0.5f), CamPos[lowestCam.cameraNumber] + new float2(0, 0.4f)) //raise up pos for RoofTopView
+                    : GetMidpointWarp(lowestCam.cameraNumber));
             }
         }
+
+        if (self is RoofTopView)
+            pos.y -= 0.4f * Options.Warp.Value * (Options.InvertPos.Value ? -1f : 1f); //fixes the roof not lining up right... hopefully
+
         return orig(self, pos, depth, camPos, hDisplace);
     }
 
@@ -846,25 +852,26 @@ public partial class Plugin : BaseUnityPlugin
     {
         orig(self, eu);
 
-        if (Options.BackgroundRotation.Value > 0)
+        if (Options.BackgroundRotation.Value != 0)
         {
             var cam = self.room.game.cameras.FirstOrDefault(c => c.room == self.room);
             if (cam != null && CamPos.ContainsKey(cam.cameraNumber))
             {
                 //reset convergence point in case I messed it up previously. Adapted from decompiled code
-                self.convergencePoint = new Vector2(self.room.game.rainWorld.screenSize.x * 0.5f,
-                    self.room.game.rainWorld.screenSize.y * (ModManager.DLCShared && self.room.waterInverted ? 1f : 2f) / 3f);
+                Vector2 properMidpoint = new Vector2(0.5f, (ModManager.DLCShared && self.room.waterInverted ? 1f : 2f) / 3f);
+                self.convergencePoint = self.room.game.rainWorld.screenSize * properMidpoint;
 
-                self.convergencePoint += Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);
+                self.convergencePoint -= Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);//GetMidpointWarp(cam.cameraNumber);
             }
         }
     }
 
+
     //Same as above, but apparently Outer Rim overwrites its inherited function for no good reason
     private Vector2 OuterRimView_DrawPos(On.Watcher.OuterRimView.orig_DrawPos orig, OuterRimView self, BackgroundScene.BackgroundSceneElement element, Vector2 camPos, RoomCamera camera)
     {
-        if (Options.BackgroundWarp.Value > 0 && CamPos.ContainsKey(camera.cameraNumber))
-            camPos += Options.BackgroundWarp.Value * GetMidpointWarp(camera.cameraNumber);
+        if (Options.BackgroundWarp.Value != 0 && CamPos.ContainsKey(camera.cameraNumber))
+            camPos -= Options.BackgroundWarp.Value * GetMidpointWarp(camera.cameraNumber);
 
         return orig(self, element, camPos, camera);
     }
@@ -874,16 +881,15 @@ public partial class Plugin : BaseUnityPlugin
     {
         orig(self, eu);
 
-        if (Options.BackgroundRotation.Value > 0)
+        if (Options.BackgroundRotation.Value != 0)
         {
             var cam = self.room.game.cameras.FirstOrDefault(c => c.room == self.room);
             if (cam != null && CamPos.ContainsKey(cam.cameraNumber))
             {
                 //reset convergence point in case I messed it up previously. Adapted from decompiled code
-                self.perspectiveCenter = new Vector2(self.room.game.rainWorld.screenSize.x,
-                    self.room.game.rainWorld.screenSize.y) * OuterRimView.ConvergenceMult;
+                self.convergencePoint = self.room.game.rainWorld.screenSize * OuterRimView.ConvergenceMult;
 
-                self.perspectiveCenter += Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);
+                self.convergencePoint -= Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);
             }
         }
     }
@@ -896,7 +902,7 @@ public partial class Plugin : BaseUnityPlugin
         orig(self, sLeaser, rCam, timeStacker, camPos);
 
         //Applies some shift to elements that aren't normally shifted, like background images and (surprisingly) clouds
-        if ((Options.BackgroundWarp.Value > 0 || Options.BackgroundRotation.Value > 0)
+        if ((Options.BackgroundWarp.Value != 0 || Options.BackgroundRotation.Value != 0)
             && CamPos.TryGetValue(rCam.cameraNumber, out float2 pos)
             && self is AboveCloudsView.Cloud or BackgroundScene.Simple2DBackgroundIllustration)
         {
@@ -926,9 +932,9 @@ public partial class Plugin : BaseUnityPlugin
     //Easily offsets any sprite
     private void OffsetSprite(BackgroundScene.BackgroundSceneElement self, RoomCamera rCam, FSprite sprite, Vector2 pos, bool offsetX = true, bool offsetY = true)
     {
-        if (Options.BackgroundWarp.Value > 0 && CamPos.ContainsKey(rCam.cameraNumber))
+        if (Options.BackgroundWarp.Value != 0 && CamPos.ContainsKey(rCam.cameraNumber))
         {
-            Vector2 newPos = pos + Options.BackgroundWarp.Value * GetMidpointWarp(rCam.cameraNumber);
+            Vector2 newPos = pos - Options.BackgroundWarp.Value * GetMidpointWarp(rCam.cameraNumber);
             if (offsetX) sprite.x = newPos.x;
             if (offsetY) sprite.y = newPos.y;
         }

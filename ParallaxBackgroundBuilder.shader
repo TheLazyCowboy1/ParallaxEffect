@@ -244,9 +244,9 @@ half4 frag (v2f i) : SV_Target
 
 	[unroll(dirCount)]
 	for (uint a = 0; a < dirCount; a++) {
-		leftRightDist[a] = testNump1;
+		//leftRightDist[a] = testNump1;
 		leftRightCol[a] = fixed4(1, 1, 1, 1); //sky
-		if (leftDist[a] == 0 && rightDist[a] == 0) { //neither ray found anything deeper
+		/*if (leftDist[a] == 0 && rightDist[a] == 0) { //neither ray found anything deeper
 			leftRightDepth[a] = 31;
 		}
 		else if (leftDist[a] == 0) { //left wall
@@ -260,6 +260,8 @@ half4 frag (v2f i) : SV_Target
 			leftRightCol[a] = leftCol[a];
 		}
 		else { //both sides found
+		*/
+		if (leftDist[a] > 0 && rightDist[a] > 0) {
 			leftRightDepth[a] = (int)(TheLazyCowboy1_MinObjectDepth + (leftDist[a] + rightDist[a]) * 0.5f * TheLazyCowboy1_ProjectionMod);
 			leftRightDist[a] = minInt(leftDist[a], rightDist[a]);
 			if (leftDist[a] < rightDist[a] && leftDepth[a] < 30) { //left closer
@@ -273,6 +275,10 @@ half4 frag (v2f i) : SV_Target
 					leftRightCol[a].r = leftRightCol[a].r + min(((float)leftDepth[a] - (float)rightDepth[a]) * (float)rightDist[a] / (leftDist[a] + rightDist[a]), 29 - rightDepth[a]) / 255;
 				}
 			}
+		}
+		else {
+			leftRightDist[a] = testNump1;
+			leftRightDepth[a] = 31;
 		}
 	}
 

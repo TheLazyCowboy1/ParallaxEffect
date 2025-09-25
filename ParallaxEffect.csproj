@@ -21,7 +21,11 @@
 		<ItemGroup>
 			<OutputFolder Include="Parallax Effect\*" />
 		</ItemGroup>
+		<ItemGroup>
+			<AssetFolder Include="Parallax Effect\AssetBundles\LazyCowboy\*" />
+		</ItemGroup>
 		<Copy SourceFiles="@(OutputFolder)" DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\Parallax Effect" />
+		<Copy SourceFiles="@(AssetFolder)" DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\Parallax Effect\AssetBundles\LazyCowboy" />
 		<Copy SourceFiles="@(BuildFiles)" DestinationFolder="C:\Program Files (x86)\Steam\steamapps\common\Rain World\RainWorld_Data\StreamingAssets\mods\Parallax Effect\plugins" />
 	</Target>
 

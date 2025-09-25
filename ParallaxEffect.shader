@@ -406,23 +406,27 @@ half4 frag (v2f i) : SV_Target
 
 	//apply redColorMod
 
-	if (redColorMod >= stepSize) {
+#if THELAZYCOWBOY1_CLOSESTPIXELONLY
+	redColorMod = abs(redColorMod); //this oftentimes gets set to a negative value
+#endif
+	redColorMod = redColorMod - stepSize; //prevent annoying artifacts with large stepSizes
+	if (redColorMod >= 0) {
 		redColorMod = redColorMod * TheLazyCowboy1_RedModScale;
 				//add noise to roughen it up a bit
 #if THELAZYCOWBOY1_CLOSESTPIXELONLY
 		if (notFound) { //found using closest pixel
 			redColorMod = redColorMod * max(noiseVal - 0.4f, 0);
 		} else {
-			redColorMod = abs(redColorMod);
+			//redColorMod = abs(redColorMod);
 			redColorMod = redColorMod + min(redColorMod, 0.4f) * (noiseVal - 0.5f) * 0.5f; //up to ~5 pixel variation: 0.4 * 0.5 = 0.2; 0.2 * 25px = 5px
 		}
 #else
 		redColorMod = redColorMod + min(redColorMod, 0.4f) * (noiseVal - 0.5f) * 0.5f; //up to ~5 pixel variation: 0.4 * 0.5 = 0.2; 0.2 * 25px = 5px
 #endif
 
-		float currDepth = ((uint)(bestCol.r * 255 - 1)) % 30;
+		int currDepth = ((uint)(round(bestCol.r * 255) - 1)) % 30;
 		float depthShift = redColorMod * 25;
-		bestCol.r = bestCol.r + clamp(depthShift, -currDepth, 29 - currDepth) * 0.0039f; //~= 1 / 255
+		bestCol.r = bestCol.r + round(clamp(depthShift, -currDepth, 29 - currDepth)) / 255.0f;
 	}
 
 	bestCol.w = 1; //don't have alphas less than 1; that can cause some weird stuff

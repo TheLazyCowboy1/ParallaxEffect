@@ -1045,7 +1045,7 @@ public partial class Plugin : BaseUnityPlugin
 
                 //(fix the mask source for good measure?)
                 if (Options.WarpTerrainCurveMask.Value)
-                    self.maskSource.SetVertices(self.frontPoints, self.backPoints); //I have no clue how expensive this operation is
+                    self.maskSource.SetVertices(self.frontPoints, self.backPoints, float.NegativeInfinity); //I have no clue how expensive this operation is
 
                 //unwarp the points
                 for (int i = warpStart; i < warpEnd; i++)

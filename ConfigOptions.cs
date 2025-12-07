@@ -36,7 +36,7 @@ public class ConfigOptions : OptionInterface
         WarpDecals = this.config.Bind<bool>("WarpDecals", true);
         WarpSnow = this.config.Bind<bool>("WarpSnow", true);
         //WarpTerrainCurves = this.config.Bind<bool>("WarpTerrainCurves", true);
-        TerrainCurveWarp = this.config.Bind<float>("TerrainCurveWarp", 1, new ConfigAcceptableRange<float>(0, 5));
+        TerrainCurveWarp = this.config.Bind<float>("TerrainCurveWarp", 1, new ConfigAcceptableRange<float>(-5, 5));
         BackgroundWarp = this.config.Bind<float>("BackgroundWarp", 1, new ConfigAcceptableRange<float>(-5, 5));
         BackgroundRotation = this.config.Bind<float>("BackgroundRotation", 1, new ConfigAcceptableRange<float>(-5, 5));
         MouseSensitivity = this.config.Bind<float>("MouseSensitivity", 1f, new ConfigAcceptableRange<float>(-10, 10));
@@ -79,6 +79,7 @@ public class ConfigOptions : OptionInterface
     public readonly Configurable<bool> WarpSnow;
     //public readonly Configurable<bool> WarpTerrainCurves;
     public readonly Configurable<float> TerrainCurveWarp;
+    public readonly Configurable<bool> WarpTerrainCurveMask = new(true);
     public readonly Configurable<float> BackgroundWarp;
     public readonly Configurable<float> BackgroundRotation;
     public readonly Configurable<float> MouseSensitivity;

@@ -13,7 +13,6 @@ using Graphics = UnityEngine.Graphics;
 using MonoMod.Cil;
 using Mono.Cecil.Cil;
 using BepInEx.Logging;
-using System.Security.Cryptography;
 
 #pragma warning disable CS0618
 
@@ -29,7 +28,7 @@ public partial class Plugin : BaseUnityPlugin
 {
     public const string MOD_ID = "LazyCowboy.ParallaxEffect",
         MOD_NAME = "Parallax Effect",
-        MOD_VERSION = "0.1.3";
+        MOD_VERSION = "0.1.5";
 
 
     public static ConfigOptions Options;
@@ -80,7 +79,8 @@ public partial class Plugin : BaseUnityPlugin
             On.AboveCloudsView.CloseCloud.DrawSprites -= CloseCloud_DrawSprites;
             On.AboveCloudsView.DistantCloud.DrawSprites -= DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites -= FlyingCloud_DrawSprites;
-            IL.TerrainCurve.DrawSprites -= TerrainCurve_DrawSprites;
+            //IL.TerrainCurve.DrawSprites -= IL_TerrainCurve_DrawSprites;
+            On.TerrainCurve.DrawSprites -= TerrainCurve_DrawSprites;
             //On.TerrainCurveMaskSource.DrawSprites -= TerrainCurveMaskSource_DrawSprites;
 
             //On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
@@ -89,12 +89,8 @@ public partial class Plugin : BaseUnityPlugin
         }
     }
 
-    //public FShader parallaxFShader;
     public Shader ParallaxShader;
     public Material ParallaxMaterial;
-
-    //public Shader ParallaxAdvancedShader;
-    //public Material ParallaxAdvancedMaterial;
 
     public Shader BackgroundBuilderShader;
     public Material Layer2BuilderMaterial, Layer3BuilderMaterial;
@@ -115,14 +111,12 @@ public partial class Plugin : BaseUnityPlugin
 
             On.RoomCamera.ctor += RoomCamera_ctor;
             On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
-            //On.RoomCamera.GetCameraBestIndex += RoomCamera_GetCameraBestIndex;
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.RoomCamera.Update += RoomCamera_Update;
 
             On.RoomCamera.UpdateSnowLight += RoomCamera_UpdateSnowLight;
             On.RoomCamera.PreLoadTexture += RoomCamera_PreLoadTexture;
             On.RoomCamera.MoveCamera2 += RoomCamera_MoveCamera2;
-            //On.WorldLoader.CreatingAbstractRoomsThread += WorldLoader_CreatingAbstractRoomsThread;
             On.WorldLoader.CreatingWorld += WorldLoader_CreatingWorld;
 
             On.CustomDecal.DrawSprites += CustomDecal_DrawSprites;
@@ -130,15 +124,11 @@ public partial class Plugin : BaseUnityPlugin
             On.BackgroundScene.Update += BackgroundScene_Update;
             On.Watcher.OuterRimView.DrawPos += OuterRimView_DrawPos;
             On.Watcher.OuterRimView.Update += OuterRimView_Update;
-            //On.BackgroundScene.BackgroundSceneElement.DrawSprites += BackgroundSceneElement_DrawSprites;
             On.BackgroundScene.Simple2DBackgroundIllustration.DrawSprites += Simple2DBackgroundIllustration_DrawSprites;
             On.AboveCloudsView.CloseCloud.DrawSprites += CloseCloud_DrawSprites;
             On.AboveCloudsView.DistantCloud.DrawSprites += DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites += FlyingCloud_DrawSprites;
-            IL.TerrainCurve.DrawSprites += TerrainCurve_DrawSprites;
-            //On.TerrainCurveMaskSource.DrawSprites += TerrainCurveMaskSource_DrawSprites;
-
-            //On.Watcher.LevelTexCombiner.CreateBuffer += LevelTexCombiner_CreateBuffer;
+            On.TerrainCurve.DrawSprites += TerrainCurve_DrawSprites;
 
             //load shader
             try
@@ -149,11 +139,6 @@ public partial class Plugin : BaseUnityPlugin
                 if (ParallaxShader == null)
                     Logger.LogError("Could not find shader ParallaxEffect.shader");
                 ParallaxMaterial = new(ParallaxShader);
-
-                //ParallaxAdvancedShader = assetBundle.LoadAsset<Shader>("ParallaxAdvanced.shader");
-                //if (ParallaxAdvancedShader == null)
-                    //Logger.LogError("Could not find shader ParallaxAdvanced.shader");
-                //ParallaxAdvancedMaterial = new(ParallaxAdvancedShader);
 
                 BackgroundBuilderShader = assetBundle.LoadAsset<Shader>("ParallaxBackgroundBuilder.shader");
                 if (BackgroundBuilderShader == null)
@@ -887,9 +872,9 @@ public partial class Plugin : BaseUnityPlugin
             if (cam != null && CamPos.ContainsKey(cam.cameraNumber))
             {
                 //reset convergence point in case I messed it up previously. Adapted from decompiled code
-                self.convergencePoint = self.room.game.rainWorld.screenSize * OuterRimView.ConvergenceMult;
+                self.perspectiveCenter = self.room.game.rainWorld.screenSize * OuterRimView.ConvergenceMult;
 
-                self.convergencePoint -= Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);
+                self.perspectiveCenter -= Options.BackgroundRotation.Value * GetMidpointWarp(cam.cameraNumber);
             }
         }
     }
@@ -970,7 +955,8 @@ public partial class Plugin : BaseUnityPlugin
 
 
     //Terrain Curves... yay...
-    private void TerrainCurve_DrawSprites(ILContext il)
+    [Obsolete]
+    private void IL_TerrainCurve_DrawSprites(ILContext il)
     {
         try
         {
@@ -1027,6 +1013,57 @@ public partial class Plugin : BaseUnityPlugin
         catch (Exception ex) { Logger.LogError(ex); }
     }
 
+    private void TerrainCurve_DrawSprites(On.TerrainCurve.orig_DrawSprites orig, TerrainCurve self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
+    {
+        try
+        {
+            if (Options.TerrainCurveWarp.Value != 0 && CamPos.TryGetValue(rCam.cameraNumber, out float2 playerPos))
+            {
+
+                //determine which points ought to be warped
+                float edgeBufferRoom = Mathf.Abs(Options.Warp.Value * Options.TerrainCurveWarp.Value) * 1.5f + self.segmentWidth * 3;
+                int warpStart = Mathf.Clamp(Mathf.FloorToInt((camPos.x - edgeBufferRoom - self.startX) / self.segmentWidth), 0, self.segments);
+                int warpEnd = Mathf.Clamp(Mathf.CeilToInt((camPos.x + rCam.sSize.x + edgeBufferRoom - self.startX) / self.segmentWidth) + 1, 0, self.segments);
+                //save the original points
+                Vector2[] oldFrontPoints = new Vector2[warpEnd - warpStart], oldBackPoints = new Vector2[warpEnd - warpStart];
+                for (int i = warpStart; i < warpEnd; i++)
+                {
+                    oldFrontPoints[i - warpStart] = self.frontPoints[i];
+                    oldBackPoints[i - warpStart] = self.backPoints[i];
+                }
+
+                //warp the points
+                float frontDepth = clampedDepthCurve((self.minDepth - 5) * 0.04f), backDepth = 1; //note: backDepth is currently just set to 1
+                for (int i = warpStart; i < warpEnd; i++)
+                {
+                    self.frontPoints[i] -= Options.TerrainCurveWarp.Value * frontDepth * CalculateWarp((self.frontPoints[i] - camPos) / rCam.sSize, playerPos);
+                    self.backPoints[i] -= Options.TerrainCurveWarp.Value * backDepth * CalculateWarp((self.backPoints[i] - camPos) / rCam.sSize, playerPos);
+                }
+
+                //run the normal code
+                orig(self, sLeaser, rCam, timeStacker, camPos);
+
+                //(fix the mask source for good measure?)
+                if (Options.WarpTerrainCurveMask.Value)
+                    self.maskSource.SetVertices(self.frontPoints, self.backPoints); //I have no clue how expensive this operation is
+
+                //unwarp the points
+                for (int i = warpStart; i < warpEnd; i++)
+                {
+                    self.frontPoints[i] = oldFrontPoints[i - warpStart];
+                    self.backPoints[i] = oldBackPoints[i - warpStart];
+                }
+
+                return; //do not call orig again!
+
+            }
+        } catch (Exception ex) { Logger.LogError(ex); }
+
+        //default case or error case
+        orig(self, sLeaser, rCam, timeStacker, camPos);
+    }
+
+    [Obsolete]
     private void TerrainCurveMaskSource_DrawSprites(On.TerrainCurveMaskSource.orig_DrawSprites orig, TerrainCurveMaskSource self, RoomCamera.SpriteLeaser sLeaser, RoomCamera rCam, float timeStacker, Vector2 camPos)
     {
         if (Options.TerrainCurveWarp.Value > 0 && CamPos.TryGetValue(rCam.cameraNumber, out var playerPos)) {
@@ -1056,6 +1093,7 @@ public partial class Plugin : BaseUnityPlugin
 
         orig(self, sLeaser, rCam, timeStacker, camPos);
     }
+    [Obsolete("Intended for use with TerrainCurveMaskSource_DrawSprites, which is no longer used.")]
     private static Vector2 V2FromV3(Vector3 v3) => new(v3.x, v3.y);
 
 
@@ -1063,7 +1101,7 @@ public partial class Plugin : BaseUnityPlugin
 
     private float clampedDepthCurve(float d)
     {
-        return (d <= Options.StartOffset.Value) ? d : depthCurve(d);//Mathf.Clamp(depthCurve(d), Options.StartOffset.Value, 1);
+        return Mathf.Clamp(depthCurve(d), Options.StartOffset.Value, 1);//(d <= Options.StartOffset.Value) ? d : depthCurve(d);
     }
     private float depthCurve(float d)
     {

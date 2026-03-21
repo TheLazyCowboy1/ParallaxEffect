@@ -241,6 +241,7 @@ public partial class Plugin : BaseUnityPlugin
         {
             screenLevelTex?.Release();
             screenLevelTex = MakeRenderTex(size.x, size.y);
+            //this would save a bunch of unused VRAM, but it doesn't work for some reason
             //screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
             Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
             PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");

@@ -220,7 +220,11 @@ public partial class Plugin : BaseUnityPlugin
                 {
                     //idk what to put here; maybe there's something I'm supposed to be reading
                 }
-                else return; //don't apply parallax if we're not in a room
+                else
+                { //don't apply parallax if we're not in a room
+                    Graphics.Blit(src, dest); //maybe inefficient? idk
+                    return;
+                }
 
                 //blit to screen tex (for more efficient parallax calculations
                 Graphics.Blit(null, screenLevelTex, ScreenTexMaterial);
@@ -228,7 +232,11 @@ public partial class Plugin : BaseUnityPlugin
                 //blit src to dest (actual parallax)
                 Graphics.Blit(src, dest, TrueParallaxMaterial);
             }
-            catch (Exception ex) { PublicLogger.LogError(ex); }
+            catch (Exception ex)
+            {
+                PublicLogger.LogError(ex);
+                Graphics.Blit(src, dest);
+            }
         }
     }
 

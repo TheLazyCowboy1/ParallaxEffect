@@ -240,8 +240,8 @@ public partial class Plugin : BaseUnityPlugin
         if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
         {
             screenLevelTex?.Release();
-            //screenLevelTex = MakeRenderTex(size.x, size.y);
-            screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
+            screenLevelTex = MakeRenderTex(size.x, size.y);
+            //screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
             Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
             PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
         }

@@ -425,7 +425,7 @@ public partial class Plugin : BaseUnityPlugin
         //TRUE PARALLAX STUFF
         //add full screen effect to camera
         self.ReturnFContainer("HUD").AddChildAtIndex(
-            new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
+            new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 },//x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
             0); //insert at index 0 (the very start) so that it changes EVERYTHING EXCEPT the UI
 
     }

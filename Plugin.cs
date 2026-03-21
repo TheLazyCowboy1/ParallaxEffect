@@ -211,7 +211,7 @@ public partial class Plugin : BaseUnityPlugin
                 {
                     screenLevelTex?.Release();
                     screenLevelTex = MakeRenderTex(src.width, src.height);
-                    Shader.SetGlobalTexture("TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
+                    Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
                     PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
                 }
 

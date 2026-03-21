@@ -58,10 +58,11 @@ public partial class Plugin : BaseUnityPlugin
         if (IsInit)
         {
             On.RoomCamera.ctor -= RoomCamera_ctor;
-            On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
-            //On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
             On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
             On.RoomCamera.Update -= RoomCamera_Update;
+            /*
+            On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
+            //On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
 
             On.RoomCamera.UpdateSnowLight -= RoomCamera_UpdateSnowLight;
             On.RoomCamera.PreLoadTexture -= RoomCamera_PreLoadTexture;
@@ -84,7 +85,7 @@ public partial class Plugin : BaseUnityPlugin
             //On.TerrainCurveMaskSource.DrawSprites -= TerrainCurveMaskSource_DrawSprites;
 
             //On.Watcher.LevelTexCombiner.CreateBuffer -= LevelTexCombiner_CreateBuffer;
-
+            */
             IsInit = false;
         }
     }
@@ -116,10 +117,10 @@ public partial class Plugin : BaseUnityPlugin
 
             On.RoomCamera.ctor += RoomCamera_ctor;
 
-            /*
-            On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.RoomCamera.Update += RoomCamera_Update;
+            /*
+            On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
 
             On.RoomCamera.UpdateSnowLight += RoomCamera_UpdateSnowLight;
             On.RoomCamera.PreLoadTexture += RoomCamera_PreLoadTexture;

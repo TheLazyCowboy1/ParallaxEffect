@@ -237,7 +237,7 @@ public partial class Plugin : BaseUnityPlugin
     private static void BlitScreenTex(int2 size)
     {
         //create screen tex if needed
-        if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.x)
+        if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
         {
             screenLevelTex?.Release();
             //screenLevelTex = MakeRenderTex(size.x, size.y);

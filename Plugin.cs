@@ -95,6 +95,11 @@ public partial class Plugin : BaseUnityPlugin
     public Shader BackgroundBuilderShader;
     public Material Layer2BuilderMaterial, Layer3BuilderMaterial;
 
+    public static Shader TrueParallaxShader;
+    public static Material TrueParallaxMaterial;
+    public static Shader ScreenTexShader;
+    public static Material ScreenTexMaterial;
+
     public static string ModFolderPath = "";
     public static bool SBCameraScrollEnabled = false;
     public static string SBCameraScrollPath = "";
@@ -110,6 +115,8 @@ public partial class Plugin : BaseUnityPlugin
             if (IsInit) return;
 
             On.RoomCamera.ctor += RoomCamera_ctor;
+
+            /*
             On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.RoomCamera.Update += RoomCamera_Update;
@@ -129,6 +136,7 @@ public partial class Plugin : BaseUnityPlugin
             On.AboveCloudsView.DistantCloud.DrawSprites += DistantCloud_DrawSprites;
             On.AboveCloudsView.FlyingCloud.DrawSprites += FlyingCloud_DrawSprites;
             On.TerrainCurve.DrawSprites += TerrainCurve_DrawSprites;
+            */
 
             //load shader
             try
@@ -149,6 +157,21 @@ public partial class Plugin : BaseUnityPlugin
 
                 ShadCamPosX = Shader.PropertyToID("TheLazyCowboy1_CamPosX");
                 ShadCamPosY = Shader.PropertyToID("TheLazyCowboy1_CamPosY");
+
+
+                //load true parallax shader
+                TrueParallaxShader = assetBundle.LoadAsset<Shader>("WarpAmount.shader");
+                if (TrueParallaxShader == null)
+                    Logger.LogError("Could not find shader WarpAmount.shader");
+                TrueParallaxMaterial = new(TrueParallaxShader);
+
+                ScreenTexShader = assetBundle.LoadAsset<Shader>("ScreenLevelTex.shader");
+                if (ScreenTexShader == null)
+                    Logger.LogError("Could not find shader ScreenLevelTex.shader");
+                ScreenTexMaterial = new(ScreenTexShader);
+
+                Futile.instance.camera.gameObject.AddComponent<ParallaxEffect>();
+
             }
             catch (Exception ex) { Logger.LogError(ex); }
 
@@ -172,6 +195,40 @@ public partial class Plugin : BaseUnityPlugin
         {
             Logger.LogError(ex);
             throw;
+        }
+    }
+
+    private class ParallaxEffect : MonoBehaviour
+    {
+        private RenderTexture screenLevelTex;
+        public void OnRenderImage(RenderTexture src, RenderTexture dest)
+        {
+            try
+            {
+                //create screen tex if needed
+                if (screenLevelTex == null || screenLevelTex.width != src.width || screenLevelTex.height != src.height)
+                {
+                    screenLevelTex?.Release();
+                    screenLevelTex = MakeRenderTex(src.width, src.height);
+                    Shader.SetGlobalTexture("TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
+                    PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
+                }
+
+                //check if we're actually in-game
+                if (Custom.rainWorld.processManager.currentMainLoop is RainWorldGame game
+                    && game.cameras != null && game.cameras.Length > 0 && game.cameras[0].room != null)
+                {
+                    //idk what to put here; maybe there's something I'm supposed to be reading
+                }
+                else return; //don't apply parallax if we're not in a room
+
+                //blit to screen tex (for more efficient parallax calculations
+                Graphics.Blit(null, screenLevelTex, ScreenTexMaterial);
+
+                //blit src to dest (actual parallax)
+                Graphics.Blit(src, dest, TrueParallaxMaterial);
+            }
+            catch (Exception ex) { PublicLogger.LogError(ex); }
         }
     }
 

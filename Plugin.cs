@@ -98,6 +98,7 @@ public partial class Plugin : BaseUnityPlugin
 
     public static Shader TrueParallaxShader;
     public static Material TrueParallaxMaterial;
+    public static FShader TrueParallaxFShader;
     public static Shader ScreenTexShader;
     public static Material ScreenTexMaterial;
 
@@ -165,13 +166,14 @@ public partial class Plugin : BaseUnityPlugin
                 if (TrueParallaxShader == null)
                     Logger.LogError("Could not find shader WarpAmount.shader");
                 TrueParallaxMaterial = new(TrueParallaxShader);
+                TrueParallaxFShader = FShader.CreateShader("LZC_TrueParallax", TrueParallaxShader);
 
                 ScreenTexShader = assetBundle.LoadAsset<Shader>("ScreenLevelTex.shader");
                 if (ScreenTexShader == null)
                     Logger.LogError("Could not find shader ScreenLevelTex.shader");
                 ScreenTexMaterial = new(ScreenTexShader);
 
-                Futile.instance.camera.gameObject.AddComponent<ParallaxEffect>();
+                //Futile.instance.camera.gameObject.AddComponent<ParallaxEffect>();
 
             }
             catch (Exception ex) { Logger.LogError(ex); }
@@ -201,20 +203,10 @@ public partial class Plugin : BaseUnityPlugin
 
     private class ParallaxEffect : MonoBehaviour
     {
-        private RenderTexture screenLevelTex;
         public void OnRenderImage(RenderTexture src, RenderTexture dest)
         {
             try
             {
-                //create screen tex if needed
-                if (screenLevelTex == null || screenLevelTex.width != src.width || screenLevelTex.height != src.height)
-                {
-                    screenLevelTex?.Release();
-                    screenLevelTex = MakeRenderTex(src.width, src.height);
-                    Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
-                    PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
-                }
-
                 //check if we're actually in-game
                 if (Custom.rainWorld.processManager.currentMainLoop is RainWorldGame game
                     && game.cameras != null && game.cameras.Length > 0 && game.cameras[0].room != null)
@@ -228,7 +220,7 @@ public partial class Plugin : BaseUnityPlugin
                 }
 
                 //blit to screen tex (for more efficient parallax calculations
-                Graphics.Blit(null, screenLevelTex, ScreenTexMaterial);
+                BlitScreenTex(new(src.width, src.height));
 
                 //blit src to dest (actual parallax)
                 Graphics.Blit(src, dest, TrueParallaxMaterial);
@@ -239,6 +231,22 @@ public partial class Plugin : BaseUnityPlugin
                 Graphics.Blit(src, dest);
             }
         }
+    }
+
+    private static RenderTexture screenLevelTex;
+    private static void BlitScreenTex(int2 size)
+    {
+        //create screen tex if needed
+        if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.x)
+        {
+            screenLevelTex?.Release();
+            //screenLevelTex = MakeRenderTex(size.x, size.y);
+            screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
+            Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
+            PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
+        }
+
+        Graphics.Blit(null, screenLevelTex, ScreenTexMaterial);
     }
 
     #endregion
@@ -413,6 +421,12 @@ public partial class Plugin : BaseUnityPlugin
 
         OrigSnowTexture?.Release();
         //OrigSnowTexture = new(1400, 800, 0, DefaultFormat.LDR) { filterMode = 0 };
+
+        //TRUE PARALLAX STUFF
+        //add full screen effect to camera
+        self.ReturnFContainer("HUD").AddChildAtIndex(
+            new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, x = -0.5f*self.sSize.x, y = -0.5f*self.sSize.y },
+            0); //insert at index 0 (the very start) so that it changes EVERYTHING EXCEPT the UI
 
     }
 
@@ -644,6 +658,9 @@ public partial class Plugin : BaseUnityPlugin
         orig(self, timeStacker, timeSpeed);
 
         SetCamPos(self, 0.5f * timeSpeed);
+
+        Vector2 size = self.sSize;
+        BlitScreenTex(new((int)size.x, (int)size.y));
     }
 
     private void RoomCamera_Update(On.RoomCamera.orig_Update orig, RoomCamera self)

@@ -172,6 +172,7 @@ public partial class Plugin : BaseUnityPlugin
                 if (ScreenTexShader == null)
                     Logger.LogError("Could not find shader ScreenLevelTex.shader");
                 ScreenTexMaterial = new(ScreenTexShader);
+                ScreenTexMaterial.EnableKeyword("THELAZYCOWBOY1_TERRAIN"); //read the terrain too
 
                 //Futile.instance.camera.gameObject.AddComponent<ParallaxEffect>();
 

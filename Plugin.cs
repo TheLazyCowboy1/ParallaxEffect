@@ -174,7 +174,7 @@ public partial class Plugin : BaseUnityPlugin
                 ScreenTexMaterial = new(ScreenTexShader);
                 ScreenTexMaterial.EnableKeyword("THELAZYCOWBOY1_TERRAIN"); //read the terrain too
 
-                Futile.instance.camera.gameObject.AddComponent<ParallaxEffect>();
+                //Futile.instance.camera.gameObject.AddComponent<ParallaxEffect>();
 
             }
             catch (Exception ex) { Logger.LogError(ex); }
@@ -426,9 +426,9 @@ public partial class Plugin : BaseUnityPlugin
 
         //TRUE PARALLAX STUFF
         //add full screen effect to camera
-        //FSprite temp = new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 };//x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
-        //self.ReturnFContainer("Bloom").AddChild(new BlitScreenTexFNode());
-        //self.ReturnFContainer("Bloom").AddChild(temp);
+        FSprite temp = new(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 };//x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
+        self.ReturnFContainer("GrabShaders").AddChild(new BlitScreenTexFNode());
+        self.ReturnFContainer("GrabShaders").AddChild(temp);
 
     }
 

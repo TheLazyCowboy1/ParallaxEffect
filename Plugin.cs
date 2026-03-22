@@ -425,10 +425,23 @@ public partial class Plugin : BaseUnityPlugin
 
         //TRUE PARALLAX STUFF
         //add full screen effect to camera
+        FSprite temp = new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 };//x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
         self.ReturnFContainer("HUD").AddChildAtIndex(
-            new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 },//x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
+            temp,
             0); //insert at index 0 (the very start) so that it changes EVERYTHING EXCEPT the UI
+        self.ReturnFContainer("HUD").AddChildAtIndex(new BlitScreenTexFNode(), 0); //also insert at front
 
+    }
+
+    private class BlitScreenTexFNode : FNode
+    {
+        public override void Redraw(bool shouldForceDirty, bool shouldUpdateDepth)
+        {
+            base.Redraw(shouldForceDirty, shouldUpdateDepth);
+
+            Vector2 size = Custom.rainWorld.screenSize;
+            BlitScreenTex(new(Mathf.RoundToInt(size.x), Mathf.RoundToInt(size.y)));
+        }
     }
 
     //Actually adds the shader to the LevelTexCombiner whenever the LevelTexCombiner gets cleared
@@ -660,8 +673,8 @@ public partial class Plugin : BaseUnityPlugin
 
         SetCamPos(self, 0.5f * timeSpeed);
 
-        Vector2 size = self.sSize;
-        BlitScreenTex(new((int)size.x, (int)size.y));
+        //Vector2 size = self.sSize;
+        //BlitScreenTex(new((int)size.x, (int)size.y));
     }
 
     private void RoomCamera_Update(On.RoomCamera.orig_Update orig, RoomCamera self)

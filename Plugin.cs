@@ -427,8 +427,8 @@ public partial class Plugin : BaseUnityPlugin
         //TRUE PARALLAX STUFF
         //add full screen effect to camera
         //FSprite temp = new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 };//x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
-        //self.ReturnFContainer("HUD").AddChildAtIndex(temp, 0); //insert at index 0 (the very start) so that it changes EVERYTHING EXCEPT the UI
-        //self.ReturnFContainer("HUD").AddChildAtIndex(new BlitScreenTexFNode(), 0); //also insert at front
+        //self.ReturnFContainer("Bloom").AddChild(new BlitScreenTexFNode());
+        //self.ReturnFContainer("Bloom").AddChild(temp);
 
     }
 

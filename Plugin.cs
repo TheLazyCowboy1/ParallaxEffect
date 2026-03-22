@@ -440,7 +440,7 @@ public partial class Plugin : BaseUnityPlugin
             base.Redraw(shouldForceDirty, shouldUpdateDepth);
 
             Vector2 size = Custom.rainWorld.screenSize;
-            BlitScreenTex(new(Mathf.RoundToInt(size.x), Mathf.RoundToInt(size.y)));
+            BlitScreenTex(new(Mathf.RoundToInt(size.x), Mathf.RoundToInt(size.y))); //idk when exactly this happens
         }
     }
 

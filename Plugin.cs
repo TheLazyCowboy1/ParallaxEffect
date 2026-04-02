@@ -447,7 +447,7 @@ public partial class Plugin : BaseUnityPlugin
         //TRUE PARALLAX STUFF
         //add full screen effect to camera
         FSprite temp = new(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 };//x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
-        self.ReturnFContainer("Bloom").AddChild(new BlitScreenTexFNode());
+        self.ReturnFContainer("GrabShaders").AddChild(new BlitScreenTexFNode()); //try putting in container BEFORE Bloom; maybe it will update in time then...?
         self.ReturnFContainer("Bloom").AddChild(temp);
 
     }

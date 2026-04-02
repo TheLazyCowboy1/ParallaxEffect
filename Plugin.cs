@@ -105,6 +105,7 @@ public partial class Plugin : BaseUnityPlugin
     public static FShader TrueParallaxFShader;
     public static Shader ScreenTexShader;
     public static Material ScreenTexMaterial;
+    public static FShader ScreenTexFShader;
 
     public static string ModFolderPath = "";
     public static bool SBCameraScrollEnabled = false;
@@ -180,6 +181,7 @@ public partial class Plugin : BaseUnityPlugin
                     Logger.LogError("Could not find shader ScreenLevelTex.shader");
                 ScreenTexMaterial = new(ScreenTexShader);
                 ScreenTexMaterial.EnableKeyword("THELAZYCOWBOY1_TERRAIN"); //read the terrain too
+                ScreenTexFShader = FShader.CreateShader("LZC_ScreenLevelTex", ScreenTexShader, new string[] { "THELAZYCOWBOY1_TERRAIN" });
 
                 //Futile.instance.camera.gameObject.AddComponent<ParallaxEffect>();
 
@@ -446,9 +448,28 @@ public partial class Plugin : BaseUnityPlugin
 
         //TRUE PARALLAX STUFF
         //add full screen effect to camera
-        FSprite temp = new(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 };//x = 0.5f*self.sSize.x, y = 0.5f*self.sSize.y },
-        self.ReturnFContainer("GrabShaders").AddChild(new BlitScreenTexFNode()); //try putting in container BEFORE Bloom; maybe it will update in time then...?
-        self.ReturnFContainer("Bloom").AddChild(temp);
+        //self.ReturnFContainer("GrabShaders").AddChild(new BlitScreenTexFNode()); //try putting in container BEFORE Bloom; maybe it will update in time then...?
+        self.ReturnFContainer("GrabShaders").AddChild(new FSprite(Futile.whiteElement) { shader = ScreenTexFShader, width = self.sSize.x, height = self.sSize.y });
+        self.ReturnFContainer("Bloom").AddChild(new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 });
+
+        //create render tex here
+        Vector2 fsize = Custom.rainWorld.screenSize;
+        int2 size = new(Mathf.RoundToInt(fsize.x), Mathf.RoundToInt(fsize.y)); //idk when exactly this happens
+        if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
+        {
+            screenLevelTex?.Release();
+            screenLevelTex = MakeRenderTex(size.x, size.y);
+
+            screenLevelTex.enableRandomWrite = true; //wanna bet it will work?
+
+            //this would save a bunch of unused VRAM, but it doesn't work for some reason
+            //screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
+            Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
+
+            Graphics.SetRandomWriteTarget(1, screenLevelTex);
+
+            PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
+        }
 
     }
 

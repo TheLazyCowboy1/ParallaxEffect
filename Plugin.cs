@@ -449,10 +449,11 @@ public partial class Plugin : BaseUnityPlugin
         //TRUE PARALLAX STUFF
         //add full screen effect to camera
         //self.ReturnFContainer("GrabShaders").AddChild(new BlitScreenTexFNode()); //try putting in container BEFORE Bloom; maybe it will update in time then...?
-        self.ReturnFContainer("GrabShaders").AddChild(new FSprite(Futile.whiteElement) { shader = ScreenTexFShader, width = self.sSize.x, height = self.sSize.y });
+        //self.ReturnFContainer("GrabShaders").AddChild(new FSprite(Futile.whiteElement) { shader = ScreenTexFShader, width = self.sSize.x, height = self.sSize.y });
         self.ReturnFContainer("Bloom").AddChild(new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 });
 
         //create render tex here
+        /*
         Vector2 fsize = Custom.rainWorld.screenSize;
         int2 size = new(Mathf.RoundToInt(fsize.x), Mathf.RoundToInt(fsize.y)); //idk when exactly this happens
         //if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
@@ -475,6 +476,7 @@ public partial class Plugin : BaseUnityPlugin
 
             Logger.LogDebug("RandomWrite textures: " + SystemInfo.supportedRandomWriteTargetCount);
         //}
+        */
 
     }
     private static int testingIndexCounter = 0;

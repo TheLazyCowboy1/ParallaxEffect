@@ -60,6 +60,10 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.ctor -= RoomCamera_ctor;
             On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
             On.RoomCamera.Update -= RoomCamera_Update;
+
+            On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
+            On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
+
             /*
             On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
             //On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
@@ -120,6 +124,9 @@ public partial class Plugin : BaseUnityPlugin
 
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.RoomCamera.Update += RoomCamera_Update;
+
+            On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
+            On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
             /*
             On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
 
@@ -190,6 +197,8 @@ public partial class Plugin : BaseUnityPlugin
             }
             else SBCameraScrollEnabled = false;
 
+            RemoveLevelHeatAndMelt();
+
             MachineConnector.SetRegisteredOI(MOD_ID, Options);
             IsInit = true;
 
@@ -201,6 +210,7 @@ public partial class Plugin : BaseUnityPlugin
             throw;
         }
     }
+
 
     private class ParallaxEffect : MonoBehaviour
     {
@@ -254,6 +264,16 @@ public partial class Plugin : BaseUnityPlugin
     #endregion
 
     #region CameraHooks
+
+    private void RemoveLevelHeatAndMelt()
+    {
+        try
+        {
+            Custom.rainWorld.Shaders["LevelHeat"].keywords = null;
+            Custom.rainWorld.Shaders["LevelMelt"].keywords = null;
+            Logger.LogDebug("Cleared keywords for LevelHeat and LevelMelt shaders");
+        } catch (Exception ex) { Logger.LogError(ex); }
+    }
 
     public int CachedTextureCount = 1;
     public RenderTexture[] Layer2TexArray = new RenderTexture[1];
@@ -432,15 +452,60 @@ public partial class Plugin : BaseUnityPlugin
 
     }
 
-    private class BlitScreenTexFNode : FNode
+    private class ScreenTexBlitter : MonoBehaviour
     {
-        public override void Redraw(bool shouldForceDirty, bool shouldUpdateDepth)
+        public void OnRenderObject()
         {
-            base.Redraw(shouldForceDirty, shouldUpdateDepth);
-
             Vector2 size = Custom.rainWorld.screenSize;
             BlitScreenTex(new(Mathf.RoundToInt(size.x), Mathf.RoundToInt(size.y))); //idk when exactly this happens
         }
+    }
+    private class BlitScreenTexFNode : FSprite
+    {
+        public BlitScreenTexFNode() : base(Futile.whiteElement) {
+            alpha = 0; //don't ACTUALLY go spreading gunk on my screen please
+        }
+
+        public override void Redraw(bool shouldForceDirty, bool shouldUpdateDepth)
+        {
+            FFacetRenderLayer prevRenderLayer = _renderLayer;
+
+            base.Redraw(shouldForceDirty, shouldUpdateDepth);
+
+            if (_renderLayer != null && _renderLayer != prevRenderLayer)
+                EditGameObject();
+
+            //Vector2 size = Custom.rainWorld.screenSize;
+            //BlitScreenTex(new(Mathf.RoundToInt(size.x), Mathf.RoundToInt(size.y))); //idk when exactly this happens
+        }
+
+        public void EditGameObject()
+        {
+            //don't need these... hopefully
+            UnityEngine.Object.Destroy(_renderLayer._meshRenderer);
+            UnityEngine.Object.Destroy(_renderLayer._meshFilter);
+            _renderLayer._gameObject.AddComponent<ScreenTexBlitter>();
+        }
+    }
+
+
+    //A couple full screen effects (LevelMelt2, Fog) should be applied AFTER the parallax
+    //Also disable WetTerrain displacing the pixels and causing visual oddities.
+    private void FixFullScreenEffect(RoomCamera self)
+    {
+        if (self.fullScreenEffect != null && self.fullScreenEffect.container != self.ReturnFContainer("Bloom"))
+            self.SetUpFullScreenEffect("Bloom");
+        Shader.SetGlobalFloat(RainWorld.ShadPropWetTerrain, 0); //disable wet terrain; it only makes things worse, sadly
+    }
+    private void RoomCamera_WarpMoveCameraActual(On.RoomCamera.orig_WarpMoveCameraActual orig, RoomCamera self, Room newRoom, int camPos)
+    {
+        orig(self, newRoom, camPos);
+        FixFullScreenEffect(self);
+    }
+    private void RoomCamera_MoveCamera_Room_int(On.RoomCamera.orig_MoveCamera_Room_int orig, RoomCamera self, Room newRoom, int camPos)
+    {
+        orig(self, newRoom, camPos);
+        FixFullScreenEffect(self);
     }
 
     //Actually adds the shader to the LevelTexCombiner whenever the LevelTexCombiner gets cleared

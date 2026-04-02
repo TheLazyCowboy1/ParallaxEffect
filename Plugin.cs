@@ -455,8 +455,8 @@ public partial class Plugin : BaseUnityPlugin
         //create render tex here
         Vector2 fsize = Custom.rainWorld.screenSize;
         int2 size = new(Mathf.RoundToInt(fsize.x), Mathf.RoundToInt(fsize.y)); //idk when exactly this happens
-        if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
-        {
+        //if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
+        //{
             screenLevelTex?.Release();
             screenLevelTex = MakeRenderTex(size.x, size.y);
 
@@ -467,15 +467,16 @@ public partial class Plugin : BaseUnityPlugin
             //screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
             Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
 
-            //Graphics.ClearRandomWriteTargets(); //maybe this will help idkkkkk
-            Graphics.SetRandomWriteTarget(3, screenLevelTex);
+            Graphics.ClearRandomWriteTargets(); //maybe this will help idkkkkk
+            Graphics.SetRandomWriteTarget(testingIndexCounter++, screenLevelTex);
 
             PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
 
             Logger.LogDebug("RandomWrite textures: " + SystemInfo.supportedRandomWriteTargetCount);
-        }
+        //}
 
     }
+    private static int testingIndexCounter = 0;
 
     private class ScreenTexBlitter : MonoBehaviour
     {

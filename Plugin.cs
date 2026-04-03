@@ -461,11 +461,11 @@ public partial class Plugin : BaseUnityPlugin
             screenLevelTex?.Release();
             //screenLevelTex = MakeRenderTex(size.x, size.y);
 
-            screenLevelTex = new(1400, 800, 0, RenderTextureFormat.R8) { filterMode = 0 };
+            screenLevelTex = new(size.x, size.y, 0, RenderTextureFormat.R8) { filterMode = 0 };
             screenLevelTex.name = "_MyUAV";
             screenLevelTex.enableRandomWrite = true; //wanna bet it will work?
             screenLevelTex.Create();
-
+            
             //this would save a bunch of unused VRAM, but it doesn't work for some reason
             //screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
             //Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);

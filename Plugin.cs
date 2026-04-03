@@ -453,33 +453,32 @@ public partial class Plugin : BaseUnityPlugin
         self.ReturnFContainer("Bloom").AddChild(new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 });
 
         //create render tex here
-        /*
+        
         Vector2 fsize = Custom.rainWorld.screenSize;
         int2 size = new(Mathf.RoundToInt(fsize.x), Mathf.RoundToInt(fsize.y)); //idk when exactly this happens
-        //if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
-        //{
+        if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
+        {
             screenLevelTex?.Release();
-            screenLevelTex = MakeRenderTex(size.x, size.y);
+            //screenLevelTex = MakeRenderTex(size.x, size.y);
 
+            screenLevelTex = new(1400, 800, 0, RenderTextureFormat.R8) { filterMode = 0 };
             screenLevelTex.name = "_MyUAV";
             screenLevelTex.enableRandomWrite = true; //wanna bet it will work?
             screenLevelTex.Create();
 
             //this would save a bunch of unused VRAM, but it doesn't work for some reason
             //screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
-            Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
+            //Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
 
             Graphics.ClearRandomWriteTargets(); //maybe this will help idkkkkk
-            Graphics.SetRandomWriteTarget(testingIndexCounter++, screenLevelTex);
+            Graphics.SetRandomWriteTarget(1, screenLevelTex);
 
             PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
 
             Logger.LogDebug("RandomWrite textures: " + SystemInfo.supportedRandomWriteTargetCount);
-        //}
-        */
+        }
 
     }
-    private static int testingIndexCounter = 0;
 
     private class ScreenTexBlitter : MonoBehaviour
     {

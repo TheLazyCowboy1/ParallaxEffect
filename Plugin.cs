@@ -461,7 +461,7 @@ public partial class Plugin : BaseUnityPlugin
             screenLevelTex?.Release();
             //screenLevelTex = MakeRenderTex(size.x, size.y);
 
-            screenLevelTex = new(size.x-1, size.y-1, 0, RenderTextureFormat.R8) { filterMode = 0 };
+            screenLevelTex = new(size.x, size.y, 0, RenderTextureFormat.R8) { filterMode = 0 };
             screenLevelTex.name = "_MyUAV";
             screenLevelTex.enableRandomWrite = true; //wanna bet it will work?
             screenLevelTex.Create();

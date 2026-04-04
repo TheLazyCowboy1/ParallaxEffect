@@ -463,9 +463,12 @@ public partial class Plugin : BaseUnityPlugin
             screenLevelTex?.Release();
             //screenLevelTex = MakeRenderTex(size.x, size.y);
 
-            screenLevelTex = new(size.x, size.y, 0, RenderTextureFormat.R8) { filterMode = 0 };
-            screenLevelTex.name = "_MyUAV";
-            screenLevelTex.enableRandomWrite = true; //wanna bet it will work?
+            screenLevelTex = new(size.x, size.y, 0, RenderTextureFormat.R8)
+            {
+                filterMode = 0,
+                name = "_MyUAV",
+                enableRandomWrite = true //wanna bet it will work?
+            };
             screenLevelTex.Create();
             
             //this would save a bunch of unused VRAM, but it doesn't work for some reason

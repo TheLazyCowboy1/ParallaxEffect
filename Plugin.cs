@@ -456,14 +456,14 @@ public partial class Plugin : BaseUnityPlugin
 
         //create render tex here
         
-        Vector2 fsize = Custom.rainWorld.screenSize;
-        int2 size = new(Mathf.RoundToInt(fsize.x), Mathf.RoundToInt(fsize.y)); //idk when exactly this happens
-        if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
+        Vector2 sSize = Custom.rainWorld.screenSize;
+        int w = Mathf.RoundToInt(sSize.x), h = Mathf.RoundToInt(sSize.y); //idk when exactly this happens
+        if (screenLevelTex == null || screenLevelTex.width != w || screenLevelTex.height != h)
         {
             screenLevelTex?.Release();
             //screenLevelTex = MakeRenderTex(size.x, size.y);
 
-            screenLevelTex = new(size.x, size.y, 0, RenderTextureFormat.R8)
+            screenLevelTex = new(w, h, 0, RenderTextureFormat.R8)
             {
                 filterMode = 0,
                 name = "_MyUAV",

@@ -450,7 +450,9 @@ public partial class Plugin : BaseUnityPlugin
         //add full screen effect to camera
         //self.ReturnFContainer("GrabShaders").AddChild(new BlitScreenTexFNode()); //try putting in container BEFORE Bloom; maybe it will update in time then...?
         //self.ReturnFContainer("GrabShaders").AddChild(new FSprite(Futile.whiteElement) { shader = ScreenTexFShader, width = self.sSize.x, height = self.sSize.y });
-        self.ReturnFContainer("Bloom").AddChild(new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 });
+        
+        //put it in HUD so that it's after all the bloom effects. It's a bit unfortunate, but too many objects in Bloom layer reference the LevelTex
+        self.ReturnFContainer("HUD").AddChild(new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 });
 
         //create render tex here
         

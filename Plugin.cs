@@ -479,7 +479,7 @@ public partial class Plugin : BaseUnityPlugin
             Graphics.SetRandomWriteTarget(1, screenLevelTex);
 
             PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
-
+            
             Logger.LogDebug("RandomWrite textures: " + SystemInfo.supportedRandomWriteTargetCount);
         }
 

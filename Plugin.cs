@@ -477,7 +477,7 @@ public partial class Plugin : BaseUnityPlugin
 
             Graphics.ClearRandomWriteTargets(); //maybe this will help idkkkkk
             Graphics.SetRandomWriteTarget(1, screenLevelTex);
-
+            
             PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
             
             Logger.LogDebug("RandomWrite textures: " + SystemInfo.supportedRandomWriteTargetCount);

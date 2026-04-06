@@ -197,7 +197,7 @@ uniform float4 _NoiseTex_TexelSize;
 RWTexture2D<float> _MyUAV : register(u1);
 uniform float2 _screenSize;
 
-//uniform float4 _spriteRect;
+uniform float4 _spriteRect;
 //uniform fixed _rimFix;
 
 struct v2f {
@@ -216,7 +216,7 @@ v2f vert (appdata_full v)
     v2f o;
     o.pos = UnityObjectToClipPos (v.vertex);
     o.uv = TRANSFORM_TEX (v.texcoord, _MainTex);
-	o.nuv = o.uv * float2(5, 4);
+	o.nuv = o.uv * float2(10.667f, 6);
 	o.suv = o.uv * _screenSize;
 	//o.grabPos = ComputeGrabScreenPos(o.pos);
     //o.scrPos = ComputeScreenPos(o.pos);
@@ -268,7 +268,7 @@ inline float sinSmoothCurve(float x) {
 }
 
 inline float highFreqNoise(float2 uv, float2 scale) {
-	float2 nuv = fmod(uv * scale, 1);
+	float2 nuv = frac(uv * scale);
 	float2 rawLerpFac = 2 * (nuv - float2(0.5f, 0.5f));
 	rawLerpFac = rawLerpFac * rawLerpFac; //^2 + abs
 	float lerpFac = max(rawLerpFac.x, rawLerpFac.y);
@@ -277,7 +277,7 @@ inline float highFreqNoise(float2 uv, float2 scale) {
 	lerpFac = lerpFac * lerpFac; //^8
 	lerpFac = lerpFac * lerpFac; //^10
 	float n1 = tex2Dlod(_NoiseTex, float4(nuv, 0, 0)).x;
-	float n2 = tex2Dlod(_NoiseTex, float4(nuv + _NoiseTex_TexelSize.xy * 10, 0, 0)).x; //10 pixel buffer
+	float n2 = tex2Dlod(_NoiseTex, float4(nuv + _NoiseTex_TexelSize.xy * 2 * (scale + float2(1,1)), 0, 0)).x; //10 pixel buffer when scale=5
 	return lerp(n1, n2, lerpFac * 0.5f);
 }
 
@@ -348,7 +348,7 @@ half4 frag (v2f i) : SV_Target
 #endif
 
 #if THELAZYCOWBOY1_CLOSESTPIXELONLY
-	half bestScore = 20;
+	//half bestScore = 20;
 	half maxXDist = max(TheLazyCowboy1_MaxXDistance, stepSize);
 	//bool notFound = true;
 #endif
@@ -379,8 +379,10 @@ half4 frag (v2f i) : SV_Target
 
 	grabPos = grabPos + float2(0.5f, 0.5f); //adjust coords slightly so that int2(round(grabPos)) becomes int2(grabPos)
 
+	uint c = 0;
 	[loop]
-	for (uint c = 0; c <= totalTests; c++) {
+	while(c <= totalTests) {
+	//for (uint c = 0; c <= totalTests; c++) {
 
 		int2 checkPos = int2(grabPos);
 		//int2 checkPos = int2(round(grabPos));
@@ -411,7 +413,7 @@ half4 frag (v2f i) : SV_Target
 
 #if THELAZYCOWBOY1_CLOSESTPIXELONLY
 		//OBVIOUSLY HAS SOME EXTRA LOGIC
-		half score;
+		//half score;
 		if (xDistance >= 0) {
 			if (xDistance < maxXDist) {
 				bestXDist = xDistance;
@@ -420,21 +422,29 @@ half4 frag (v2f i) : SV_Target
 				bestDep = newDepth;
 				//bestPercentage = percentage;
 				//notFound = false;
-				bestScore = -3;
+				//bestScore = -3;
 				break; //we found it! don't run any more code, ideally
 			}
-			score = xDistance + 2;
+			//score = xDistance + 2;
 		}
 		else {
-			score = -percentage;
+			//score = -percentage;
 			xDistance = -xDistance;
+			bestGrabPos = checkPos;
+			bestDep = newDepth;
 		}
+		/*
+		//so, it's ALWAYS better if xDistance is < 0.
+		//And it should ALWAYS be the case that one pixel xDistance is <= 0
+		//And since our scoring system is simply: the higher percentage, the better; and percentage always increases:
+		//Therefore, always set bestGrabPos whenever xDistance < 0
 		if (score < bestScore) {
 			bestGrabPos = checkPos;
 			bestScore = score;
 			bestDep = newDepth;
 			//bestPercentage = percentage;
 		}
+		*/
 		bestXDist = min(bestXDist, xDistance);
 		//if (xDistance < bestXDist) {
 			//bestXDist = xDistance;
@@ -455,8 +465,8 @@ half4 frag (v2f i) : SV_Target
 
 		grabPos = grabPos + moveStep;
 		percentage = percentage + stepSize;
+		c = c + 1;
 	}
-
 
 //APPLY FINAL NOISE
 	half4 finalCol = _ParallaxGrabTex.Load(int3(bestGrabPos, 0));
@@ -468,6 +478,11 @@ half4 frag (v2f i) : SV_Target
 	//noiseVal = highFreqNoise(bestXDistPos, float2(5, 4));
 	
 	//float2 bestDep2 = float2(bestDep,bestDep);
+
+	//note for reference: if c > totalTests, then the loop did NOT break
+	//if c <= totalTests, then the loop did break
+
+	/*
 #if THELAZYCOWBOY1_CLOSESTPIXELONLY
 	float targetPercentage = (bestScore <= -3) ? (bestDep+bestXDist)*(1-bestXDist) : bestDep; //different logic depending on whether we're extrapolating the pixel or not
 #else
@@ -478,17 +493,26 @@ half4 frag (v2f i) : SV_Target
 //   u     p ns
 	float targetPercentage = (bestDep+bestXDist)*(1-bestXDist);
 #endif
-	
+*/
 	//float targetPercentage = bestDep;
-	float2 noisePoint = (initGrabPos //start at this pos
-		+ unoptimizedMoveStep * TheLazyCowboy1_TestNum * targetPercentage) //go "percentage" of the way towards the ending pos
+	float2 noisePoint;
+#if THELAZYCOWBOY1_CLOSESTPIXELONLY
+	if (c > totalTests) { //loop did NOT break
+		noisePoint = (initGrabPos //start at this pos
+			+ unoptimizedMoveStep * TheLazyCowboy1_TestNum * bestDep) //go "bestDep" of the way towards the ending pos
+			/ _screenSize; //convert from texel coordinates to uv
+	}
+	else
+#endif
+	//logic if the loop DID break. This is always used if we're not using CLOSESTPIXELONLY
+	noisePoint = (bestGrabPos //start at grabPos
+		+ float2(bestXDist, bestXDist) * TheLazyCowboy1_Warp*0.5f) //fixed offset based on bestXDist and Warp; *0.5f because I think it'll look better
 		/ _screenSize; //convert from texel coordinates to uv
 
-	//noiseVal = highFreqNoise(lerp(bestGrabPos / _screenSize, i.uv, (bestScore <= -3) ? saturate(bestDep + bestXDist) : bestDep), float2(5, 4)); //slightly different logic depending on whether we're making up the pixel or not
-	noiseVal = highFreqNoise(noisePoint, float2(5, 4)); //just approximate the right position instead of going through all the processing to find the right point
+	noiseVal = highFreqNoise(noisePoint - _spriteRect.xy, float2(5.333f, 3)); //subtract spriteRect.xy so that noise doesn't appear to move when the screen is moving
 
 	half curBrightness = finalCol.r * 0.299f + finalCol.g * 0.587f + finalCol.b * 0.114f;
-	half add = bestXDist * TheLazyCowboy1_AntiAliasingFac * (noiseVal - 0.5h) * (curBrightness + 0.3h); //more
+	half add = bestXDist * TheLazyCowboy1_AntiAliasingFac * (noiseVal - 0.5h) * (curBrightness + 0.3h); //more noise if pixel is already brighter
 	finalCol.x += add;
 	finalCol.y += add;
 	finalCol.z += add;

@@ -61,8 +61,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
             On.RoomCamera.Update -= RoomCamera_Update;
 
-            On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
-            On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
+            //On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
+            //On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
 
             /*
             On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
@@ -103,9 +103,6 @@ public partial class Plugin : BaseUnityPlugin
     public static Shader TrueParallaxShader;
     public static Material TrueParallaxMaterial;
     public static FShader TrueParallaxFShader;
-    public static Shader ScreenTexShader;
-    public static Material ScreenTexMaterial;
-    public static FShader ScreenTexFShader;
 
     public static string ModFolderPath = "";
     public static bool SBCameraScrollEnabled = false;
@@ -126,8 +123,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.RoomCamera.Update += RoomCamera_Update;
 
-            On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
-            On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
+            //On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
+            //On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
             /*
             On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
 
@@ -176,15 +173,6 @@ public partial class Plugin : BaseUnityPlugin
                 TrueParallaxMaterial = new(TrueParallaxShader);
                 TrueParallaxFShader = FShader.CreateShader("LZC_TrueParallax", TrueParallaxShader);
 
-                ScreenTexShader = assetBundle.LoadAsset<Shader>("ScreenLevelTex.shader");
-                if (ScreenTexShader == null)
-                    Logger.LogError("Could not find shader ScreenLevelTex.shader");
-                ScreenTexMaterial = new(ScreenTexShader);
-                ScreenTexMaterial.EnableKeyword("THELAZYCOWBOY1_TERRAIN"); //read the terrain too
-                ScreenTexFShader = FShader.CreateShader("LZC_ScreenLevelTex", ScreenTexShader, new string[] { "THELAZYCOWBOY1_TERRAIN" });
-
-                //Futile.instance.camera.gameObject.AddComponent<ParallaxEffect>();
-
             }
             catch (Exception ex) { Logger.LogError(ex); }
 
@@ -211,56 +199,6 @@ public partial class Plugin : BaseUnityPlugin
             Logger.LogError(ex);
             throw;
         }
-    }
-
-
-    private class ParallaxEffect : MonoBehaviour
-    {
-        public void OnRenderImage(RenderTexture src, RenderTexture dest)
-        {
-            try
-            {
-                //check if we're actually in-game
-                if (Custom.rainWorld.processManager.currentMainLoop is RainWorldGame game
-                    && game.cameras != null && game.cameras.Length > 0 && game.cameras[0].room != null)
-                {
-                    //idk what to put here; maybe there's something I'm supposed to be reading
-                }
-                else
-                { //don't apply parallax if we're not in a room
-                    Graphics.Blit(src, dest); //maybe inefficient? idk
-                    return;
-                }
-
-                //blit to screen tex (for more efficient parallax calculations
-                BlitScreenTex(new(src.width, src.height));
-
-                //blit src to dest (actual parallax)
-                Graphics.Blit(src, dest, TrueParallaxMaterial);
-            }
-            catch (Exception ex)
-            {
-                PublicLogger.LogError(ex);
-                Graphics.Blit(src, dest);
-            }
-        }
-    }
-
-    private static RenderTexture screenLevelTex;
-    private static void BlitScreenTex(int2 size)
-    {
-        //create screen tex if needed
-        if (screenLevelTex == null || screenLevelTex.width != size.x || screenLevelTex.height != size.y)
-        {
-            screenLevelTex?.Release();
-            screenLevelTex = MakeRenderTex(size.x, size.y);
-            //this would save a bunch of unused VRAM, but it doesn't work for some reason
-            //screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
-            Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
-            PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
-        }
-
-        Graphics.Blit(null, screenLevelTex, ScreenTexMaterial);
     }
 
     #endregion
@@ -296,12 +234,19 @@ public partial class Plugin : BaseUnityPlugin
 
     public RenderTexture OrigSnowTexture;
 
+    public RenderTexture ScreenLevelTex;
+
     //public CommandBuffer BackgroundBuilderBuffer;
     public bool CanRenderBackground = true;
     //public string LastGeneratedRoom = "";
     public List<string> GeneratedBackgrounds = new();
 
     public byte[] PreLoadedLayer2, PreLoadedLayer3;
+
+    //public static float2 CamPos;
+    public static FakeDictionary<float2> CamPos = new(4);
+    public static FakeDictionary<Vector2> MidpointWarp = new(4);
+    public static FakeDictionary<FSprite> ParallaxSprites = new(4);
 
 
     //Sets/calculates the shader constants
@@ -448,77 +393,36 @@ public partial class Plugin : BaseUnityPlugin
 
         //TRUE PARALLAX STUFF
         //add full screen effect to camera
-        //self.ReturnFContainer("GrabShaders").AddChild(new BlitScreenTexFNode()); //try putting in container BEFORE Bloom; maybe it will update in time then...?
-        //self.ReturnFContainer("GrabShaders").AddChild(new FSprite(Futile.whiteElement) { shader = ScreenTexFShader, width = self.sSize.x, height = self.sSize.y });
-        
         //put it in HUD so that it's after all the bloom effects. It's a bit unfortunate, but too many objects in Bloom layer reference the LevelTex
-        self.ReturnFContainer("HUD").AddChild(new FSprite(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 });
+        FSprite sprite = new(Futile.whiteElement) { shader = TrueParallaxFShader, width = self.sSize.x, height = self.sSize.y, anchorX = 0, anchorY = 0 };
+        ParallaxSprites[self.cameraNumber] = sprite;
+        self.ReturnFContainer("HUD").AddChild(ParallaxSprites[self.cameraNumber]);
 
         //create render tex here
         
         Vector2 sSize = Custom.rainWorld.screenSize;
         int w = Mathf.RoundToInt(sSize.x), h = Mathf.RoundToInt(sSize.y); //idk when exactly this happens
-        if (screenLevelTex == null || screenLevelTex.width != w || screenLevelTex.height != h)
+        if (ScreenLevelTex == null || ScreenLevelTex.width != w || ScreenLevelTex.height != h)
         {
-            screenLevelTex?.Release();
-            //screenLevelTex = MakeRenderTex(size.x, size.y);
-
-            screenLevelTex = new(w, h, 0, RenderTextureFormat.R8)
+            ScreenLevelTex?.Release();
+            ScreenLevelTex = new(w, h, 0, RenderTextureFormat.R8)
             {
                 filterMode = 0,
-                name = "_MyUAV",
+                //name = "_MyUAV",
                 enableRandomWrite = true //wanna bet it will work?
             };
-            screenLevelTex.Create();
-            
-            //this would save a bunch of unused VRAM, but it doesn't work for some reason
-            //screenLevelTex = new(size.x, size.y, 0, UnityEngine.Experimental.Rendering.GraphicsFormat.R8_UInt) { filterMode = 0 }; //red channel only
-            //Shader.SetGlobalTexture("_TheLazyCowboy1_ScreenLevelTex", screenLevelTex);
+            ScreenLevelTex.Create();
 
             Graphics.ClearRandomWriteTargets(); //maybe this will help idkkkkk
-            Graphics.SetRandomWriteTarget(1, screenLevelTex);
+            Graphics.SetRandomWriteTarget(1, ScreenLevelTex);
             
             PublicLogger.LogDebug("Created TheLazyCowboy1_ScreenLevelTex");
             
             Logger.LogDebug("RandomWrite textures: " + SystemInfo.supportedRandomWriteTargetCount);
         }
 
-    }
+        CamPos.Remove(self.cameraNumber); //don't lerp from previous camera's position
 
-    private class ScreenTexBlitter : MonoBehaviour
-    {
-        public void OnRenderObject()
-        {
-            Vector2 size = Custom.rainWorld.screenSize;
-            BlitScreenTex(new(Mathf.RoundToInt(size.x), Mathf.RoundToInt(size.y))); //idk when exactly this happens
-        }
-    }
-    private class BlitScreenTexFNode : FSprite
-    {
-        public BlitScreenTexFNode() : base(Futile.whiteElement) {
-            alpha = 0; //don't ACTUALLY go spreading gunk on my screen please
-        }
-
-        public override void Redraw(bool shouldForceDirty, bool shouldUpdateDepth)
-        {
-            FFacetRenderLayer prevRenderLayer = _renderLayer;
-
-            base.Redraw(shouldForceDirty, shouldUpdateDepth);
-
-            if (_renderLayer != null && _renderLayer != prevRenderLayer)
-                EditGameObject();
-
-            //Vector2 size = Custom.rainWorld.screenSize;
-            //BlitScreenTex(new(Mathf.RoundToInt(size.x), Mathf.RoundToInt(size.y))); //idk when exactly this happens
-        }
-
-        public void EditGameObject()
-        {
-            //don't need these... hopefully
-            UnityEngine.Object.Destroy(_renderLayer._meshRenderer);
-            UnityEngine.Object.Destroy(_renderLayer._meshFilter);
-            _renderLayer._gameObject.AddComponent<ScreenTexBlitter>();
-        }
     }
 
 
@@ -546,6 +450,8 @@ public partial class Plugin : BaseUnityPlugin
     //And builds the 2nd and 3rd layers...
     private void RoomCamera_ApplyPositionChange(On.RoomCamera.orig_ApplyPositionChange orig, RoomCamera self)
     {
+        CamPos.Remove(self.cameraNumber); //instantly snap camera into place
+
         IntVector2 origSize = new(0, 0); //say origSize was 0 if it didn't exist before
         if (self.levelTexCombiner.combinedLevelTex == null) //SBCameraScroll refuses to resize unless the texture already exists; a big shortcoming
             self.levelTexCombiner.Initialize();
@@ -692,17 +598,10 @@ public partial class Plugin : BaseUnityPlugin
     private static Texture LevTex(RoomCamera self) => SBCameraScrollEnabled ? self.levelGraphic?._atlas?.texture : self.levelTexture;
 
 
-    //public static float2 CamPos;
-    public static Dictionary<int, float2> CamPos = new(4);
-    public static Dictionary<int, Vector2> MidpointWarp = new(4);
-
     //Sets the CamPos
     public void SetCamPos(RoomCamera self, float moveMod = 1)
     {
         Vector2 pos = new(0.5f, 0.5f);
-
-        if (!CamPos.ContainsKey(self.cameraNumber))
-            CamPos.Add(self.cameraNumber, new(0.5f, 0.5f));
 
         //Follow creatures
         var crit = self.followAbstractCreature?.realizedCreature;
@@ -747,8 +646,21 @@ public partial class Plugin : BaseUnityPlugin
         pos.y = Mathf.Clamp01(pos.y);
 
         //Actually change camera position
-        CamPos[self.cameraNumber] += moveMod * Options.CameraMoveSpeed.Value
-            * (new float2(pos.x, pos.y) - CamPos[self.cameraNumber]);
+        //CamPos[self.cameraNumber] += moveMod * Options.CameraMoveSpeed.Value
+        //    * (new float2(pos.x, pos.y) - CamPos[self.cameraNumber]);
+        float2 oldPos = CamPos[self.cameraNumber];
+        if (CamPos.ContainsKey(self.cameraNumber))
+        {
+            CamPos[self.cameraNumber] = new(
+                Custom.LerpAndTick(oldPos.x, pos.x, moveMod * Options.CameraMoveSpeed.Value, moveMod * 0.001f),
+                Custom.LerpAndTick(oldPos.y, pos.y, moveMod * Options.CameraMoveSpeed.Value, moveMod * 0.001f)
+                );
+        }
+        else
+        {
+            CamPos.Add(self.cameraNumber, pos.ToF2());
+        }
+
         if (Options.InvertPos.Value)
         {
             Shader.SetGlobalFloat(ShadCamPosX, 1f - CamPos[self.cameraNumber].x);
@@ -776,6 +688,18 @@ public partial class Plugin : BaseUnityPlugin
 
     private void RoomCamera_Update(On.RoomCamera.orig_Update orig, RoomCamera self)
     {
+        if (!ParallaxSprites.TryGetValue(self.cameraNumber, out FSprite sprite)
+            || sprite == null
+            || sprite.container == null
+            || sprite.container.GetChildIndex(sprite) < 0)
+        {
+            FContainer container = self.ReturnFContainer("HUD");
+            if (container == null)
+                Logger.LogError("HUD container is null for camera# " + self.cameraNumber);
+            else
+                container.AddChildAtIndex(sprite, 0);
+        }
+
         orig(self);
 
         SetCamPos(self, 0.5f);
@@ -972,7 +896,6 @@ public partial class Plugin : BaseUnityPlugin
         //warp background
         if (Options.BackgroundWarp.Value != 0 && self.backgroundGraphic.isVisible && CamPos.ContainsKey(self.cameraNumber))
         {
-            
             Vector2 warp = Options.BackgroundWarp.Value * GetMidpointWarp(self.cameraNumber);
 
             self.backgroundGraphic.x = self.backgroundGraphic.x - warp.x;

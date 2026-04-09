@@ -61,8 +61,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.DrawUpdate -= RoomCamera_DrawUpdate;
             On.RoomCamera.Update -= RoomCamera_Update;
 
-            //On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
-            //On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
+            On.RoomCamera.MoveCamera_Room_int -= RoomCamera_MoveCamera_Room_int;
+            On.RoomCamera.WarpMoveCameraActual -= RoomCamera_WarpMoveCameraActual;
 
             /*
             On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
@@ -123,8 +123,8 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.DrawUpdate += RoomCamera_DrawUpdate;
             On.RoomCamera.Update += RoomCamera_Update;
 
-            //On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
-            //On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
+            On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
+            On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
             /*
             On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
 
@@ -276,7 +276,7 @@ public partial class Plugin : BaseUnityPlugin
         Shader.SetGlobalFloat("TheLazyCowboy1_AntiAliasingFac", Options.AntiAliasing.Value * 2.5f);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxXDistance",Options.MaxXDistance.Value);
 
-        Shader.SetGlobalFloat("TheLazyCowboy1_NegativeWarp", 0);
+        Shader.SetGlobalFloat("TheLazyCowboy1_PositiveWarp", 0.8f);
         Shader.SetGlobalFloat("TheLazyCowboy1_Layer30Depth", 1);
         Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundDepth", 1);
         Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundNoise", 0);
@@ -445,8 +445,8 @@ public partial class Plugin : BaseUnityPlugin
     //Also disable WetTerrain displacing the pixels and causing visual oddities.
     private void FixFullScreenEffect(RoomCamera self)
     {
-        if (self.fullScreenEffect != null && self.fullScreenEffect.container != self.ReturnFContainer("Bloom"))
-            self.SetUpFullScreenEffect("Bloom");
+        //if (self.fullScreenEffect != null && self.fullScreenEffect.container != self.ReturnFContainer("Bloom"))
+            //self.SetUpFullScreenEffect("Bloom");
         Shader.SetGlobalFloat(RainWorld.ShadPropWetTerrain, 0); //disable wet terrain; it only makes things worse, sadly
     }
     private void RoomCamera_WarpMoveCameraActual(On.RoomCamera.orig_WarpMoveCameraActual orig, RoomCamera self, Room newRoom, int camPos)

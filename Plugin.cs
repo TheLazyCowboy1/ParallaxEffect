@@ -276,9 +276,8 @@ public partial class Plugin : BaseUnityPlugin
         Shader.SetGlobalFloat("TheLazyCowboy1_AntiAliasingFac", Options.AntiAliasing.Value * 2.5f);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxXDistance",Options.MaxXDistance.Value);
 
-        Shader.SetGlobalFloat("TheLazyCowboy1_PositiveWarp", 0.8f);
+        Shader.SetGlobalFloat("TheLazyCowboy1_PivotDepth", 1);
         Shader.SetGlobalFloat("TheLazyCowboy1_Layer30Depth", 1);
-        Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundDepth", 1);
         Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundNoise", 0);
 
         Shader.SetGlobalFloat("TheLazyCowboy1_ProjectionMod", Options.DepthScale.Value);

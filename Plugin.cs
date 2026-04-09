@@ -108,7 +108,7 @@ public partial class Plugin : BaseUnityPlugin
     public static bool SBCameraScrollEnabled = false;
     public static string SBCameraScrollPath = "";
 
-    public int ShadCamPosX = -1, ShadCamPosY = -1;
+    public int ShadCamPosX = -1, ShadCamPosY = -1, ShadCamPosVec = -1;
 
     private bool IsInit;
     private void RainWorldOnOnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
@@ -164,12 +164,13 @@ public partial class Plugin : BaseUnityPlugin
 
                 ShadCamPosX = Shader.PropertyToID("TheLazyCowboy1_CamPosX");
                 ShadCamPosY = Shader.PropertyToID("TheLazyCowboy1_CamPosY");
+                ShadCamPosVec = Shader.PropertyToID("TheLazyCowboy1_CamPos");
 
 
                 //load true parallax shader
-                TrueParallaxShader = assetBundle.LoadAsset<Shader>("WarpAmount.shader");
+                TrueParallaxShader = assetBundle.LoadAsset<Shader>("TrueParallax.shader");
                 if (TrueParallaxShader == null)
-                    Logger.LogError("Could not find shader WarpAmount.shader");
+                    Logger.LogError("Could not find shader TrueParallax.shader");
                 TrueParallaxMaterial = new(TrueParallaxShader);
                 TrueParallaxFShader = FShader.CreateShader("LZC_TrueParallax", TrueParallaxShader);
 
@@ -257,21 +258,35 @@ public partial class Plugin : BaseUnityPlugin
         Shader.SetGlobalFloat("TheLazyCowboy1_Warp", Options.Warp.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxWarp", Options.MaxWarpFactor.Value);
 
+        int testNum = Mathf.Max(2, (int)Mathf.Ceil(Mathf.Abs(Options.Warp.Value) * Options.MaxWarpFactor.Value / Options.Optimization.Value));
+        Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum);
+        Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", 1.0f / testNum);
+
+        /*
         float startOffset = clampedDepthCurve(-0.2f); //prevent unnecessary processing
         int testNum = Mathf.Max(2, (int)Mathf.Ceil(Mathf.Abs(Options.Warp.Value) * Options.MaxWarpFactor.Value * (Options.EndOffset.Value - startOffset) / Options.Optimization.Value));
         Shader.SetGlobalInt("TheLazyCowboy1_TestNum", testNum);
         Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", (Options.EndOffset.Value - startOffset) / testNum);
-        //Shader.SetGlobalFloat("TheLazyCowboy1_StepSize", Options.Optimization.Value);
-
+        
         Shader.SetGlobalFloat("TheLazyCowboy1_StartOffset", startOffset);
-        Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);
+        */
+
+        //Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundScale", Options.BackgroundScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_AntiAliasingFac", Options.AntiAliasing.Value * 2.5f);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxXDistance",Options.MaxXDistance.Value);
+
+        Shader.SetGlobalFloat("TheLazyCowboy1_NegativeWarp", 0);
+        Shader.SetGlobalFloat("TheLazyCowboy1_Layer30Depth", 1);
+        Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundDepth", 1);
+        Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundNoise", 0);
+
         Shader.SetGlobalFloat("TheLazyCowboy1_ProjectionMod", Options.DepthScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_MinObjectDepth", Options.MinObjectDepth.Value);
+
         Shader.SetGlobalFloat(ShadCamPosX, 0.5f);
         Shader.SetGlobalFloat(ShadCamPosY, 0.5f);
+        Shader.SetGlobalVector(ShadCamPosVec, new Vector2(0.5f, 0.5f));
 
         //keywords
 
@@ -665,11 +680,13 @@ public partial class Plugin : BaseUnityPlugin
         {
             Shader.SetGlobalFloat(ShadCamPosX, 1f - CamPos[self.cameraNumber].x);
             Shader.SetGlobalFloat(ShadCamPosY, 1f - CamPos[self.cameraNumber].y);
+            Shader.SetGlobalVector(ShadCamPosVec, Vector2.one - CamPos[self.cameraNumber].ToV2());
         }
         else
         {
             Shader.SetGlobalFloat(ShadCamPosX, CamPos[self.cameraNumber].x);
             Shader.SetGlobalFloat(ShadCamPosY, CamPos[self.cameraNumber].y);
+            Shader.SetGlobalVector(ShadCamPosVec, CamPos[self.cameraNumber].ToV2());
         }
 
 
@@ -697,7 +714,10 @@ public partial class Plugin : BaseUnityPlugin
             if (container == null)
                 Logger.LogError("HUD container is null for camera# " + self.cameraNumber);
             else
+            {
                 container.AddChildAtIndex(sprite, 0);
+                Logger.LogDebug("Parallax sprite was removed from container! Re-added it to container");
+            }
         }
 
         orig(self);

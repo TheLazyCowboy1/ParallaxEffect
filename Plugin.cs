@@ -64,8 +64,9 @@ public partial class Plugin : BaseUnityPlugin
             On.RoomCamera.MoveCamera_Room_int -= RoomCamera_MoveCamera_Room_int;
             On.RoomCamera.WarpMoveCameraActual -= RoomCamera_WarpMoveCameraActual;
 
-            /*
             On.RoomCamera.ApplyPositionChange -= RoomCamera_ApplyPositionChange;
+
+            /*
             //On.RoomCamera.GetCameraBestIndex -= RoomCamera_GetCameraBestIndex;
 
             On.RoomCamera.UpdateSnowLight -= RoomCamera_UpdateSnowLight;
@@ -104,6 +105,9 @@ public partial class Plugin : BaseUnityPlugin
     public static Material TrueParallaxMaterial;
     public static FShader TrueParallaxFShader;
 
+    public static Shader ThicknessMapShader;
+    public static Material ThicknessMapMaterial;
+
     public static string ModFolderPath = "";
     public static bool SBCameraScrollEnabled = false;
     public static string SBCameraScrollPath = "";
@@ -125,8 +129,9 @@ public partial class Plugin : BaseUnityPlugin
 
             On.RoomCamera.MoveCamera_Room_int += RoomCamera_MoveCamera_Room_int;
             On.RoomCamera.WarpMoveCameraActual += RoomCamera_WarpMoveCameraActual;
-            /*
+
             On.RoomCamera.ApplyPositionChange += RoomCamera_ApplyPositionChange;
+            /*
 
             On.RoomCamera.UpdateSnowLight += RoomCamera_UpdateSnowLight;
             On.RoomCamera.PreLoadTexture += RoomCamera_PreLoadTexture;
@@ -173,6 +178,11 @@ public partial class Plugin : BaseUnityPlugin
                     Logger.LogError("Could not find shader TrueParallax.shader");
                 TrueParallaxMaterial = new(TrueParallaxShader);
                 TrueParallaxFShader = FShader.CreateShader("LZC_TrueParallax", TrueParallaxShader);
+
+                ThicknessMapShader = assetBundle.LoadAsset<Shader>("ThicknessMap.shader");
+                if (ThicknessMapShader == null)
+                    Logger.LogError("Could not find shader ThicknessMap.shader");
+                ThicknessMapMaterial = new(ThicknessMapShader);
 
             }
             catch (Exception ex) { Logger.LogError(ex); }
@@ -273,7 +283,7 @@ public partial class Plugin : BaseUnityPlugin
 
         //Shader.SetGlobalFloat("TheLazyCowboy1_RedModScale", Options.RedModScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundScale", Options.BackgroundScale.Value);
-        Shader.SetGlobalFloat("TheLazyCowboy1_AntiAliasingFac", Options.AntiAliasing.Value * 2.5f);
+        Shader.SetGlobalFloat("TheLazyCowboy1_AntiAliasingFac", Options.AntiAliasing.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_MaxXDistance",Options.MaxXDistance.Value);
 
         Shader.SetGlobalFloat("TheLazyCowboy1_PivotDepth", 1);
@@ -419,7 +429,7 @@ public partial class Plugin : BaseUnityPlugin
         if (ScreenLevelTex == null || ScreenLevelTex.width != w || ScreenLevelTex.height != h)
         {
             ScreenLevelTex?.Release();
-            ScreenLevelTex = new(w, h, 0, RenderTextureFormat.R8)
+            ScreenLevelTex = new(w, h, 0, Options.ShaderLayers.Value > 1 ? RenderTextureFormat.ARGB32 : RenderTextureFormat.R8)
             {
                 filterMode = 0,
                 //name = "_MyUAV",
@@ -473,6 +483,11 @@ public partial class Plugin : BaseUnityPlugin
             origSize = new(LevTex(self).width, LevTex(self).height);
 
         orig(self);
+
+        Graphics.Blit(LevTex(self), Layer2TexArray[0], ThicknessMapMaterial);
+        Shader.SetGlobalTexture("_TheLazyCowboy1_Layer2Tex", Layer2TexArray[0]);
+        return;
+
 
         if (self.room == null) return;
 

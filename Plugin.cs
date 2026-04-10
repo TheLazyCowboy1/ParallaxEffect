@@ -477,15 +477,19 @@ public partial class Plugin : BaseUnityPlugin
         CamPos.Remove(self.cameraNumber); //instantly snap camera into place
 
         IntVector2 origSize = new(0, 0); //say origSize was 0 if it didn't exist before
+        /*
         if (self.levelTexCombiner.combinedLevelTex == null) //SBCameraScroll refuses to resize unless the texture already exists; a big shortcoming
             self.levelTexCombiner.Initialize();
         else
             origSize = new(LevTex(self).width, LevTex(self).height);
-
+        */
         orig(self);
 
-        Graphics.Blit(LevTex(self), Layer2TexArray[0], ThicknessMapMaterial);
-        Shader.SetGlobalTexture("_TheLazyCowboy1_Layer2Tex", Layer2TexArray[0]);
+        if (Options.ShaderLayers.Value > 1)
+        {
+            Graphics.Blit(LevTex(self), Layer2TexArray[0], ThicknessMapMaterial);
+            Shader.SetGlobalTexture("_TheLazyCowboy1_Layer2Tex", Layer2TexArray[0]);
+        }
         return;
 
 

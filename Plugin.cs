@@ -290,6 +290,7 @@ public partial class Plugin : BaseUnityPlugin
         Shader.SetGlobalFloat("TheLazyCowboy1_Layer30Depth", 1);
         Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundNoise", 0);
 
+        Shader.SetGlobalInt("TheLazyCowboy1_BackgroundTestNum", 22);
         Shader.SetGlobalFloat("TheLazyCowboy1_ProjectionMod", Options.DepthScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_MinObjectDepth", Options.MinObjectDepth.Value);
 

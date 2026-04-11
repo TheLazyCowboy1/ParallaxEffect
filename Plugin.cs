@@ -288,9 +288,11 @@ public partial class Plugin : BaseUnityPlugin
 
         Shader.SetGlobalFloat("TheLazyCowboy1_PivotDepth", 1);
         Shader.SetGlobalFloat("TheLazyCowboy1_Layer30Depth", 1);
-        Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundNoise", 0);
+        Shader.SetGlobalFloat("TheLazyCowboy1_BackgroundNoise", Options.RedModScale.Value);
+        if (Options.RedModScale.Value > 0.0001f) Shader.EnableKeyword("THELAZYCOWBOY1_BACKGROUNDNOISE");
+        else Shader.DisableKeyword("THELAZYCOWBOY1_BACKGROUNDNOISE");
 
-        Shader.SetGlobalInt("TheLazyCowboy1_BackgroundTestNum", 22);
+            Shader.SetGlobalInt("TheLazyCowboy1_BackgroundTestNum", 22);
         Shader.SetGlobalFloat("TheLazyCowboy1_ProjectionMod", Options.DepthScale.Value);
         Shader.SetGlobalFloat("TheLazyCowboy1_MinObjectDepth", Options.MinObjectDepth.Value);
 
